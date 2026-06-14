@@ -415,11 +415,18 @@ function ClientApp({session,profile}){
 }
 function ClientPosts({client}){
   const [posts,setPosts]=useState(null);const [latest,setLatest]=useState({});
-  useEffect(()=>{(async()=>{
-    const {data:p}=await sb.from("posts").select("*").eq("client_id",client.id).order("published_at",{ascending:false});
-    const {data:s}=await sb.from("snapshots").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
-    const by={};(s||[]).forEach(x=>{by[x.post_id]=x;});setLatest(by);setPosts(p||[]);
-  })();},[client.id]);
+  useEffect(()=>{
+    let live=true;
+    const run=async attempt=>{
+      const {data:p}=await sb.from("posts").select("*").eq("client_id",client.id).order("published_at",{ascending:false});
+      const {data:s}=await sb.from("snapshots").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
+      if(!live)return;
+      if((!p||p.length===0)&&attempt<3){setTimeout(()=>run(attempt+1),500);return;}
+      const by={};(s||[]).forEach(x=>{by[x.post_id]=x;});setLatest(by);setPosts(p||[]);
+    };
+    run(0);
+    return ()=>{live=false;};
+  },[client.id]);
   if(posts===null)return null;
   if(!posts.length)return <Empty title="No posts yet" body="Your content reports will appear here."/>;
   return <div>
@@ -546,13 +553,20 @@ function periodMetrics(posts,latestByPost,metrics,a,b){
 function ReportView({client}){
   const [preset,setPreset]=useState("month");
   const [raw,setRaw]=useState(null);
-  useEffect(()=>{setRaw(null);(async()=>{
-    const {data:posts}=await sb.from("posts").select("*").eq("client_id",client.id);
-    const {data:snaps}=await sb.from("snapshots").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
-    const {data:metrics}=await sb.from("account_metrics").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
-    const latest={};(snaps||[]).forEach(s=>{latest[s.post_id]=s;});
-    setRaw({posts:posts||[],latest,metrics:metrics||[]});
-  })();},[client.id]);
+  useEffect(()=>{
+    let live=true;
+    const run=async attempt=>{
+      const {data:posts}=await sb.from("posts").select("*").eq("client_id",client.id);
+      const {data:snaps}=await sb.from("snapshots").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
+      const {data:metrics}=await sb.from("account_metrics").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
+      if(!live)return;
+      if((!posts||posts.length===0)&&attempt<3){setTimeout(()=>run(attempt+1),500);return;}
+      const latest={};(snaps||[]).forEach(s=>{latest[s.post_id]=s;});
+      setRaw({posts:posts||[],latest,metrics:metrics||[]});
+    };
+    setRaw(null);run(0);
+    return ()=>{live=false;};
+  },[client.id]);
   const r=getRange(preset);
   const cur=useMemo(()=>raw?periodMetrics(raw.posts,raw.latest,raw.metrics,r.start,r.end):null,[raw,preset]);
   const prev=useMemo(()=>raw?periodMetrics(raw.posts,raw.latest,raw.metrics,r.prevStart,r.prevEnd):null,[raw,preset]);
