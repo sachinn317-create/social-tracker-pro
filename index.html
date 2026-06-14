@@ -93,7 +93,7 @@ function Root(){
   useEffect(()=>{
     if(!configured)return;
     sb.auth.getSession().then(({data})=>{setSession(data.session);if(!data.session)setBooting(false);});
-    const {data:sub}=sb.auth.onAuthStateChange((_e,s)=>{setSession(s);if(!s){setProfile(null);setBooting(false);}});
+    const {data:sub}=sb.auth.onAuthStateChange((_e,s)=>{setTimeout(()=>{setSession(s);if(!s){setProfile(null);setBooting(false);}},0);});
     return ()=>sub.subscription.unsubscribe();
   },[]);
 
@@ -177,7 +177,8 @@ function Header({title,sub,email,right}){
 /* ========================== ADMIN APP ========================= */
 function AdminApp({session}){
   const [clients,setClients]=useState([]);
-  const [currentId,setCurrentId]=useState(null);
+  const [currentId,setCurrentId]=useState(()=>{try{return localStorage.getItem("smx_admin_client")||null;}catch{return null;}});
+  const pickClient=id=>{setCurrentId(id);try{localStorage.setItem("smx_admin_client",id);}catch{}};
   const [tab,setTab]=useState("posts");
   const [loading,setLoading]=useState(true);
   const [toast,setToast]=useState(null);
@@ -188,7 +189,7 @@ function AdminApp({session}){
     const {data,error}=await sb.from("clients").select("*").order("created_at");
     if(error)flash(error.message,true);
     setClients(data||[]);
-    if(data&&data.length&&!currentId)setCurrentId(data[0].id);
+    if(data&&data.length){const ok=currentId&&data.some(c=>c.id===currentId);if(!ok)pickClient(data[0].id);}
     setLoading(false);
   };
   useEffect(()=>{loadClients();},[]);
@@ -196,7 +197,7 @@ function AdminApp({session}){
 
   return <Shell>
     <Header title="Social Tracker" sub="Admin · all clients" email={session.user.email}
-      right={<ClientSwitcher clients={clients} current={current} onPick={id=>{setCurrentId(id);setTab("posts");}} onNew={()=>setNewClient(true)}/>}/>
+      right={<ClientSwitcher clients={clients} current={current} onPick={id=>{pickClient(id);setTab("posts");}} onNew={()=>setNewClient(true)}/>}/>
     {loading? <Splash/> :
      clients.length===0 ? <Empty title="No clients yet" body="Create your first client to start logging posts." action={<button onClick={()=>setNewClient(true)} className="sm-btn px-4 py-2 rounded-lg text-sm font-semibold" style={{background:T.brass,color:"#fff"}}>Add client</button>}/> :
      current ? <>
@@ -205,7 +206,7 @@ function AdminApp({session}){
        {tab==="account" && <AccountAdmin client={current} flash={flash}/>}
        {tab==="overview" && <OverviewView client={current}/>}
      </> : null}
-    {newClient && <ClientModal onClose={()=>setNewClient(false)} onSaved={c=>{setNewClient(false);loadClients();setCurrentId(c.id);flash("Client added.");}} flash={flash}/>}
+    {newClient && <ClientModal onClose={()=>setNewClient(false)} onSaved={c=>{setNewClient(false);loadClients();pickClient(c.id);flash("Client added.");}} flash={flash}/>}
     {toast && <Toast {...toast}/>}
   </Shell>;
 }
