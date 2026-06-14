@@ -98,27 +98,32 @@ function Root(){
   const [session,setSession]=useState(null);
   const [profile,setProfile]=useState(null);
   const [booting,setBooting]=useState(true);
+  const uid=session&&session.user?session.user.id:null;
 
   useEffect(()=>{
     if(!configured)return;
     sb.auth.getSession().then(({data})=>{setSession(data.session);if(!data.session)setBooting(false);});
-    const {data:sub}=sb.auth.onAuthStateChange((_e,s)=>{setTimeout(()=>{setSession(s);if(!s){setProfile(null);setBooting(false);}},0);});
+    const {data:sub}=sb.auth.onAuthStateChange((_e,s)=>{setTimeout(()=>{setSession(s);if(!s)setBooting(false);},0);});
     return ()=>sub.subscription.unsubscribe();
   },[]);
 
   useEffect(()=>{
-    if(!session)return;
+    if(!uid){setProfile(null);return;}
+    let live=true;
     (async()=>{
-      const {data}=await sb.from("profiles").select("*").eq("id",session.user.id).single();
-      setProfile(data||{id:session.user.id,role:"client",client_id:null});
+      const {data}=await sb.from("profiles").select("*").eq("id",uid).single();
+      if(!live)return;
+      setProfile(data||{id:uid,role:"client",client_id:null});
       setBooting(false);
     })();
-  },[session]);
+    return ()=>{live=false;};
+  },[uid]);
 
   if(!configured) return <ConfigNeeded/>;
   if(booting) return <Splash/>;
   if(!session) return <Login/>;
-  if(profile && profile.role==="admin") return <AdminApp session={session}/>;
+  if(!profile) return <Splash/>;
+  if(profile.role==="admin") return <AdminApp session={session}/>;
   return <ClientApp session={session} profile={profile}/>;
 }
 
