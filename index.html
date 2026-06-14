@@ -219,7 +219,7 @@ function AdminApp({session}){
        {tab==="posts" && <PostsAdmin client={current} flash={flash}/>}
        {tab==="account" && <AccountAdmin client={current} flash={flash}/>}
        {tab==="overview" && <OverviewView client={current}/>}
-       {tab==="report" && <ReportView client={current}/>}
+       {tab==="report" && <ReportView client={current} admin/>}
      </> : null}
     {newClient && <ClientModal onClose={()=>setNewClient(false)} onSaved={c=>{setNewClient(false);loadClients();pickClient(c.id);flash("Client added.");}} flash={flash}/>}
     {toast && <Toast {...toast}/>}
@@ -550,9 +550,71 @@ function periodMetrics(posts,latestByPost,metrics,a,b){
     topPosts:[...inPosts].map(p=>({p,s:latestByPost[p.id]})).filter(x=>x.s).sort((x,y)=>er(y.s)-er(x.s)).slice(0,5),
   };
 }
-function ReportView({client}){
+/* --------------------------- charts --------------------------- */
+function ChartNote({text}){return <p style={{fontSize:12,color:T.faint,padding:"14px 2px"}}>{text}</p>;}
+
+function FollowersTrend({data}){
+  if(!data||data.length<2)return <ChartNote text="Log at least two account readings in this period to chart follower growth."/>;
+  const W=640,H=190,padL=48,padR=18,padT=16,padB=26;
+  const xs=data.map((_,i)=>padL+(W-padL-padR)*(i/(data.length-1)));
+  const vals=data.map(d=>d.value);
+  let mn=Math.min(...vals),mx=Math.max(...vals);
+  if(mn===mx){mn-=1;mx+=1;}
+  const gap=(mx-mn)*0.15;mn=Math.max(0,mn-gap);mx=mx+gap;
+  const y=v=>padT+(H-padT-padB)*(1-(v-mn)/(mx-mn));
+  const pts=data.map((d,i)=>[xs[i],y(d.value)]);
+  const line=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  const area=line+" L"+xs[xs.length-1].toFixed(1)+" "+(H-padB)+" L"+xs[0].toFixed(1)+" "+(H-padB)+" Z";
+  const grid=[0,0.5,1].map(t=>mn+(mx-mn)*t);
+  return <svg viewBox={"0 0 "+W+" "+H} width="100%" style={{display:"block"}}>
+    <defs><linearGradient id="fgrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={T.brass} stopOpacity="0.2"/><stop offset="1" stopColor={T.brass} stopOpacity="0"/></linearGradient></defs>
+    {grid.map((g,i)=>{const yy=y(g);return <g key={i}><line x1={padL} x2={W-padR} y1={yy} y2={yy} stroke={T.lineSoft} strokeWidth="1"/><text x={padL-8} y={yy+3} textAnchor="end" fontSize="10" fill={T.faint} fontFamily={T.mono}>{fmt(Math.round(g))}</text></g>;})}
+    <path d={area} fill="url(#fgrad)"/>
+    <path d={line} fill="none" stroke={T.brass} strokeWidth="2.2"/>
+    {pts.map((p,i)=><circle key={i} cx={p[0]} cy={p[1]} r="3.2" fill={T.surface} stroke={T.brass} strokeWidth="2"/>)}
+    <text x={xs[0]} y={H-7} textAnchor="start" fontSize="10" fill={T.faint} fontFamily={T.mono}>{data[0].label}</text>
+    <text x={xs[xs.length-1]} y={H-7} textAnchor="end" fontSize="10" fill={T.faint} fontFamily={T.mono}>{data[data.length-1].label}</text>
+  </svg>;
+}
+
+function PostCompare({items}){
+  if(!items||!items.length)return <ChartNote text="No posts published in this period to compare."/>;
+  const max=Math.max(...items.map(i=>i.reach),1);
+  return <div className="flex flex-col gap-2.5">
+    {items.map((it,i)=><div key={i} className="flex items-center gap-3">
+      <div style={{width:"32%",minWidth:0}}><div className="truncate" style={{fontSize:12.5,fontWeight:500}}>{it.title}</div><div style={{fontSize:10.5,color:T.faint,fontFamily:T.mono}}>{it.format}</div></div>
+      <div style={{flex:1}}><div style={{height:20,background:T.surface2,borderRadius:6,overflow:"hidden"}}><div style={{height:"100%",width:Math.max(3,it.reach/max*100)+"%",background:i===0?T.brass:T.steel,borderRadius:6}}/></div></div>
+      <div className="text-right" style={{width:92}}><div style={{fontFamily:T.mono,fontSize:12.5,fontWeight:600}}>{fmt(it.reach)}</div><div style={{fontSize:10.5,color:T.brass,fontFamily:T.mono}}>{it.er.toFixed(1)}% eng</div></div>
+    </div>)}
+  </div>;
+}
+
+function Funnel({stages}){
+  const total=stages.reduce((s,x)=>s+x.value,0);
+  if(!total)return <ChartNote text="Log account readings with profile visits, website taps, enquiries and bookings to see how content converts to business."/>;
+  const max=Math.max(...stages.map(s=>s.value),1);
+  const colors=[T.steel,T.steel,T.brass,T.good];
+  return <div className="flex flex-col gap-2">
+    {stages.map((s,i)=>{const w=Math.max(10,s.value/max*100);const conv=i>0&&stages[i-1].value>0?Math.round(s.value/stages[i-1].value*100):null;
+      return <div key={i} className="flex items-center gap-3">
+        <div style={{width:104,fontSize:11.5,color:T.sub,textAlign:"right",flexShrink:0}}>{s.label}</div>
+        <div style={{flex:1,display:"flex",justifyContent:"center"}}><div style={{width:w+"%",background:colors[i]||T.steel,borderRadius:6,padding:"7px 8px",textAlign:"center",color:"#fff",fontFamily:T.mono,fontSize:12.5,fontWeight:600,whiteSpace:"nowrap"}}>{fmt(s.value)}</div></div>
+        <div style={{width:54,fontSize:11,color:T.faint,fontFamily:T.mono,flexShrink:0}}>{conv!=null?conv+"%":""}</div>
+      </div>;})}
+  </div>;
+}
+
+function ReportView({client,admin}){
   const [preset,setPreset]=useState("month");
   const [raw,setRaw]=useState(null);
+  const [report,setReport]=useState(undefined);
+  const [genBusy,setGenBusy]=useState(false);
+  const [genErr,setGenErr]=useState("");
+  const loadReport=async()=>{
+    const {data}=await sb.from("reports").select("*").eq("client_id",client.id).order("created_at",{ascending:false}).limit(1);
+    setReport(data&&data[0]?data[0]:null);
+  };
+  useEffect(()=>{setReport(undefined);loadReport();},[client.id]);
   useEffect(()=>{
     let live=true;
     const run=async attempt=>{
@@ -571,7 +633,38 @@ function ReportView({client}){
   const cur=useMemo(()=>raw?periodMetrics(raw.posts,raw.latest,raw.metrics,r.start,r.end):null,[raw,preset]);
   const prev=useMemo(()=>raw?periodMetrics(raw.posts,raw.latest,raw.metrics,r.prevStart,r.prevEnd):null,[raw,preset]);
   if(!raw||!cur)return <Splash/>;
+  const buildPayload=()=>{
+    const inP=raw.posts.filter(p=>within(p.published_at,r.start,r.end)).slice(0,20);
+    const posts=inP.map(p=>{const s=raw.latest[p.id]||{};const d=new Date(p.published_at);return {
+      title:p.title||"Untitled",format:p.format,
+      day:d.toLocaleDateString(undefined,{weekday:"long"}),
+      time:d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}),
+      hashtags:p.hashtags||"",music:p.music||"",
+      reach:num(s.reach),engagement_pct:+er(s).toFixed(1),saves:num(s.saves),comments:num(s.comments),shares:num(s.shares)};});
+    const acct=raw.metrics.map(m=>({date:new Date(m.measured_at).toLocaleDateString(),followers:num(m.followers),enquiries:num(m.enquiries),bookings:num(m.bookings)}));
+    const slim=o=>({reach:o.reach,avg_engagement_pct:+o.avgEr.toFixed(1),saves:o.saves,followers:o.followers,enquiries:o.enquiries,bookings:o.bookings,posts:o.postCount});
+    return {client_id:client.id,client_name:client.name,client_industry:client.industry,period_label:r.label,
+      period_start:r.start.toISOString().slice(0,10),period_end:r.end.toISOString().slice(0,10),
+      current:slim(cur),previous:slim(prev),posts,account_readings:acct};
+  };
+  const gen=async()=>{
+    setGenBusy(true);setGenErr("");
+    try{
+      const {data:{session}}=await sb.auth.getSession();
+      const res=await fetch("/api/insights",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+(session?session.access_token:"")},body:JSON.stringify(buildPayload())});
+      const j=await res.json();
+      if(!res.ok)throw new Error(j.error||"Could not generate the report.");
+      const {data:saved,error}=await sb.from("reports").insert([{client_id:client.id,kind:"strategy",period_start:r.start.toISOString().slice(0,10),period_end:r.end.toISOString().slice(0,10),body:j.report}]).select().single();
+      if(error)throw new Error("Report generated, but saving it failed: "+error.message);
+      setReport(saved);
+    }catch(e){setGenErr(e.message);}finally{setGenBusy(false);}
+  };
   const genOn=new Date().toLocaleDateString(undefined,{day:"numeric",month:"long",year:"numeric"});
+  const inM=raw.metrics.filter(m=>within(m.measured_at,r.start,r.end)).sort((a,b)=>new Date(a.measured_at)-new Date(b.measured_at));
+  const followersData=inM.filter(m=>m.followers!=null).map(m=>({label:new Date(m.measured_at).toLocaleDateString(undefined,{day:"numeric",month:"short"}),value:num(m.followers)}));
+  const netFollowers=followersData.length>1?followersData[followersData.length-1].value-followersData[0].value:null;
+  const funnelStages=[{label:"Profile visits",value:inM.reduce((s,m)=>s+num(m.profile_visits),0)},{label:"Website taps",value:inM.reduce((s,m)=>s+num(m.website_taps),0)},{label:"Enquiries",value:inM.reduce((s,m)=>s+num(m.enquiries),0)},{label:"Bookings",value:inM.reduce((s,m)=>s+num(m.bookings),0)}];
+  const postCompare=raw.posts.filter(p=>within(p.published_at,r.start,r.end)).map(p=>{const s=raw.latest[p.id]||{};return {title:p.title||"Untitled",format:p.format,reach:num(s.reach),er:er(s)};}).sort((a,b)=>b.reach-a.reach).slice(0,6);
 
   return <div>
     {/* controls — hidden in the PDF */}
@@ -610,8 +703,23 @@ function ReportView({client}){
       </div>
 
       <div className="card rounded-xl p-4 mb-4" style={{background:T.surface,border:"1px solid "+T.line}}>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 style={{fontSize:13.5,fontWeight:600}}>Audience growth</h3>
+          {netFollowers!=null && <span style={{fontFamily:T.mono,fontSize:12,fontWeight:600,color:netFollowers>=0?T.good:T.bad}}>{netFollowers>=0?"▲":"▼"} {fmt(Math.abs(netFollowers))} followers</span>}
+        </div>
+        <FollowersTrend data={followersData}/>
+      </div>
+
+      <div className="card rounded-xl p-4 mb-4" style={{background:T.surface,border:"1px solid "+T.line}}>
+        <h3 style={{fontSize:13.5,fontWeight:600,marginBottom:2}}>Content → outcomes</h3>
+        <p style={{fontSize:11.5,color:T.faint,marginBottom:12}}>How reach turned into real business this period</p>
+        <Funnel stages={funnelStages}/>
+      </div>
+
+      <div className="card rounded-xl p-4 mb-4" style={{background:T.surface,border:"1px solid "+T.line}}>
         <h3 style={{fontSize:13.5,fontWeight:600,marginBottom:3}}>Top posts this period</h3>
-        <p style={{fontSize:11.5,color:T.faint,marginBottom:10}}>{cur.postCount} post{cur.postCount!==1?"s":""} published · ranked by engagement</p>
+        <p style={{fontSize:11.5,color:T.faint,marginBottom:12}}>{cur.postCount} post{cur.postCount!==1?"s":""} published · ranked by reach &amp; engagement</p>
+        <div className="mb-4"><PostCompare items={postCompare}/></div>
         {cur.topPosts.length===0? <p style={{fontSize:12.5,color:T.faint}}>No posts published in this period.</p> :
          <div className="rounded-lg overflow-hidden" style={{border:"1px solid "+T.lineSoft}}>
            <div className="grid px-3 py-2 text-xs" style={{gridTemplateColumns:"2fr .9fr .8fr .8fr",background:T.surface2,color:T.faint,fontFamily:T.mono}}>
@@ -626,9 +734,40 @@ function ReportView({client}){
          </div>}
       </div>
 
+      <div className="card rounded-xl p-4 mb-4" style={{background:T.surface,border:"1px solid "+T.line}}>
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <h3 style={{fontSize:13.5,fontWeight:600}}>AI strategy &amp; content plan</h3>
+          {admin && <button onClick={gen} disabled={genBusy} className="no-print sm-btn flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold" style={{background:T.brass,color:"#fff",opacity:genBusy?0.6:1}}>
+            {genBusy?<><Icon name="loader" size={14} color="#fff" cls="spin"/> Generating…</>:<><Icon name="target" size={14} color="#fff"/> {report?"Regenerate":"Generate report"}</>}
+          </button>}
+        </div>
+        {genErr && <p className="no-print" style={{fontSize:12.5,color:T.bad,marginBottom:8}}>{genErr}</p>}
+        {report===undefined ? <p style={{fontSize:12.5,color:T.faint}}>Loading…</p> :
+         report ? <div>
+           <p style={{fontSize:11,color:T.faint,fontFamily:T.mono,marginBottom:10}}>Generated {new Date(report.created_at).toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"})}{report.kind?" · "+report.kind:""}</p>
+           <ReportBody body={report.body}/>
+         </div> :
+         <p style={{fontSize:12.5,color:T.faint}}>{admin?"No AI report yet for this client. Click Generate — it reads the data above and writes a full strategy analysis plus next month's content calendar. Review it, then your client sees it on their next login.":"Your strategy report will appear here once Story & Motion has prepared it."}</p>}
+      </div>
+
       <p style={{fontSize:10.5,color:T.faint,textAlign:"center",marginTop:14}}>Prepared by Story &amp; Motion · {client.name} · {r.label}</p>
     </div>
   </div>;
+}
+function ReportBody({body}){
+  const blocks=[];let list=null;
+  const bold=t=>t.split(/\*\*(.+?)\*\*/g).map((seg,i)=>i%2?<strong key={i}>{seg}</strong>:seg);
+  const flush=key=>{if(list){blocks.push(<ul key={key} style={{margin:"4px 0 12px",paddingLeft:18}}>{list}</ul>);list=null;}};
+  (body||"").split("\n").forEach((ln,i)=>{
+    const t=ln.trim();
+    if(/^#{1,3}\s+/.test(t)){flush("l"+i);blocks.push(<h3 key={i} style={{fontSize:14.5,fontWeight:700,margin:"16px 0 6px",color:T.ink}}>{t.replace(/^#{1,3}\s+/,"")}</h3>);}
+    else if(/^[-*]\s+/.test(t)){(list=list||[]).push(<li key={i} style={{fontSize:13,color:T.sub,marginBottom:4,lineHeight:1.55}}>{bold(t.replace(/^[-*]\s+/,""))}</li>);}
+    else if(/^\d+\.\s+/.test(t)){(list=list||[]).push(<li key={i} style={{fontSize:13,color:T.sub,marginBottom:4,lineHeight:1.55}}>{bold(t.replace(/^\d+\.\s+/,""))}</li>);}
+    else if(t===""){flush("l"+i);}
+    else {flush("l"+i);blocks.push(<p key={i} style={{fontSize:13,color:T.sub,lineHeight:1.6,marginBottom:8}}>{bold(t)}</p>);}
+  });
+  flush("lend");
+  return <div>{blocks}</div>;
 }
 function Metric({label,v,cur,prev,tone}){
   const has=prev>0; const dp=has?((cur-prev)/prev*100):null; const up=dp!=null&&dp>=0;
