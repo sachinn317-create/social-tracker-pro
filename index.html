@@ -21,6 +21,15 @@
   .spin{animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+  @media print{
+    .no-print{display:none!important}
+    body{background:#fff!important}
+    body *{visibility:hidden}
+    .report,.report *{visibility:visible}
+    .report{position:absolute;left:0;top:0;width:100%;padding:0!important}
+    .report .card{break-inside:avoid}
+    @page{margin:14mm}
+  }
 </style>
 </head>
 <body>
@@ -201,10 +210,11 @@ function AdminApp({session}){
     {loading? <Splash/> :
      clients.length===0 ? <Empty title="No clients yet" body="Create your first client to start logging posts." action={<button onClick={()=>setNewClient(true)} className="sm-btn px-4 py-2 rounded-lg text-sm font-semibold" style={{background:T.brass,color:"#fff"}}>Add client</button>}/> :
      current ? <>
-       <Tabs tab={tab} setTab={setTab} items={[["posts","Posts"],["account","Account & outcomes"],["overview","Overview"]]}/>
+       <Tabs tab={tab} setTab={setTab} items={[["posts","Posts"],["account","Account & outcomes"],["overview","Overview"],["report","Report"]]}/>
        {tab==="posts" && <PostsAdmin client={current} flash={flash}/>}
        {tab==="account" && <AccountAdmin client={current} flash={flash}/>}
        {tab==="overview" && <OverviewView client={current}/>}
+       {tab==="report" && <ReportView client={current}/>}
      </> : null}
     {newClient && <ClientModal onClose={()=>setNewClient(false)} onSaved={c=>{setNewClient(false);loadClients();pickClient(c.id);flash("Client added.");}} flash={flash}/>}
     {toast && <Toast {...toast}/>}
@@ -393,9 +403,9 @@ function ClientApp({session,profile}){
   if(missing)return <Shell><Header title="Welcome" email={session.user.email}/><Empty title="Your account isn't linked to a brand yet" body="Story & Motion will connect your dashboard shortly. Please check back soon."/></Shell>;
   if(!client)return <Splash/>;
   return <Shell>
-    <Header title={client.name} sub="Your performance dashboard" email={session.user.email}/>
-    <OverviewView client={client}/>
-    <div className="mt-6"><ClientPosts client={client}/></div>
+    <Header title={client.name} sub="Your performance report" email={session.user.email}/>
+    <ReportView client={client}/>
+    <div className="mt-6 no-print"><ClientPosts client={client}/></div>
   </Shell>;
 }
 function ClientPosts({client}){
@@ -499,6 +509,117 @@ function MetricModal({client,onClose,onSaved,flash}){
       <label className="sm:col-span-2 block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono}}>NOTES</span><input value={m.notes} onChange={e=>set("notes",e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.ink}}/></label>
     </div>
   </Modal>;
+}
+
+/* ========================== REPORT =========================== */
+const PRESETS=[["l7","Last 7 days"],["l30","Last 30 days"],["month","This month"],["lastmonth","Last month"]];
+const DAY=864e5;
+function getRange(preset){
+  const now=new Date(),Y=now.getFullYear(),M=now.getMonth();
+  if(preset==="l7")return {start:new Date(now-7*DAY),end:now,prevStart:new Date(now-14*DAY),prevEnd:new Date(now-7*DAY),label:"Last 7 days"};
+  if(preset==="l30")return {start:new Date(now-30*DAY),end:now,prevStart:new Date(now-60*DAY),prevEnd:new Date(now-30*DAY),label:"Last 30 days"};
+  if(preset==="month")return {start:new Date(Y,M,1),end:now,prevStart:new Date(Y,M-1,1),prevEnd:new Date(Y,M,1),label:new Date(Y,M,1).toLocaleString(undefined,{month:"long",year:"numeric"})};
+  return {start:new Date(Y,M-1,1),end:new Date(Y,M,1),prevStart:new Date(Y,M-2,1),prevEnd:new Date(Y,M-1,1),label:new Date(Y,M-1,1).toLocaleString(undefined,{month:"long",year:"numeric"})};
+}
+const within=(iso,a,b)=>{const d=new Date(iso);return d>=a&&d<b;};
+function periodMetrics(posts,latestByPost,metrics,a,b){
+  const inPosts=posts.filter(p=>within(p.published_at,a,b));
+  const ls=inPosts.map(p=>latestByPost[p.id]).filter(Boolean);
+  const mIn=metrics.filter(m=>within(m.measured_at,a,b));
+  return {
+    postCount:inPosts.length,
+    reach:ls.reduce((s,x)=>s+num(x.reach),0),
+    avgEr:ls.length?ls.reduce((s,x)=>s+er(x),0)/ls.length:0,
+    saves:ls.reduce((s,x)=>s+num(x.saves),0),
+    follows:ls.reduce((s,x)=>s+num(x.follows),0),
+    followers:mIn.length?num(mIn[mIn.length-1].followers):null,
+    enquiries:mIn.reduce((s,x)=>s+num(x.enquiries),0),
+    bookings:mIn.reduce((s,x)=>s+num(x.bookings),0),
+    topPosts:[...inPosts].map(p=>({p,s:latestByPost[p.id]})).filter(x=>x.s).sort((x,y)=>er(y.s)-er(x.s)).slice(0,5),
+  };
+}
+function ReportView({client}){
+  const [preset,setPreset]=useState("month");
+  const [raw,setRaw]=useState(null);
+  useEffect(()=>{setRaw(null);(async()=>{
+    const {data:posts}=await sb.from("posts").select("*").eq("client_id",client.id);
+    const {data:snaps}=await sb.from("snapshots").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
+    const {data:metrics}=await sb.from("account_metrics").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
+    const latest={};(snaps||[]).forEach(s=>{latest[s.post_id]=s;});
+    setRaw({posts:posts||[],latest,metrics:metrics||[]});
+  })();},[client.id]);
+  const r=getRange(preset);
+  const cur=useMemo(()=>raw?periodMetrics(raw.posts,raw.latest,raw.metrics,r.start,r.end):null,[raw,preset]);
+  const prev=useMemo(()=>raw?periodMetrics(raw.posts,raw.latest,raw.metrics,r.prevStart,r.prevEnd):null,[raw,preset]);
+  if(!raw||!cur)return <Splash/>;
+  const genOn=new Date().toLocaleDateString(undefined,{day:"numeric",month:"long",year:"numeric"});
+
+  return <div>
+    {/* controls — hidden in the PDF */}
+    <div className="no-print flex flex-wrap items-center justify-between gap-3 mb-5">
+      <div className="flex gap-1 flex-wrap">
+        {PRESETS.map(([k,l])=><button key={k} onClick={()=>setPreset(k)} className="sm-btn px-3 py-1.5 rounded-lg text-sm" style={{background:preset===k?T.brass:T.surface,color:preset===k?"#fff":T.sub,border:"1px solid "+(preset===k?T.brass:T.line)}}>{l}</button>)}
+      </div>
+      <button onClick={()=>window.print()} className="sm-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold" style={{background:T.ink,color:"#fff"}}>
+        <Icon name="download" size={15} color="#fff"/> Download PDF
+      </button>
+    </div>
+
+    {/* the report itself */}
+    <div className="report">
+      <div className="card rounded-xl p-5 mb-4" style={{background:T.surface,border:"1px solid "+T.line}}>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div style={{fontFamily:T.mono,fontSize:11,letterSpacing:"0.2em",color:T.brass}}>STORY &amp; MOTION</div>
+            <h2 style={{fontSize:22,fontWeight:700,marginTop:4}}>{client.name}</h2>
+            <p style={{color:T.sub,fontSize:13}}>Performance report · {r.label}</p>
+          </div>
+          <div className="text-right" style={{fontSize:11.5,color:T.faint,fontFamily:T.mono}}>
+            <div>{client.industry.toUpperCase()}</div><div>Generated {genOn}</div>
+          </div>
+        </div>
+      </div>
+
+      <p style={{fontSize:11,color:T.faint,fontFamily:T.mono,letterSpacing:".08em",margin:"0 2px 8px"}}>VS PREVIOUS {r.label==="Last 7 days"?"7 DAYS":r.label==="Last 30 days"?"30 DAYS":"PERIOD"}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+        <Metric label="Reach" v={fmt(cur.reach)} cur={cur.reach} prev={prev.reach}/>
+        <Metric label="Avg engagement" v={cur.avgEr.toFixed(1)+"%"} cur={cur.avgEr} prev={prev.avgEr}/>
+        <Metric label="Saves" v={fmt(cur.saves)} cur={cur.saves} prev={prev.saves}/>
+        <Metric label="Followers" v={cur.followers==null?"—":fmt(cur.followers)} cur={cur.followers||0} prev={prev.followers||0} tone={T.steel}/>
+        <Metric label="Enquiries" v={fmt(cur.enquiries)} cur={cur.enquiries} prev={prev.enquiries} tone={T.brass}/>
+        <Metric label="Bookings" v={fmt(cur.bookings)} cur={cur.bookings} prev={prev.bookings} tone={T.good}/>
+      </div>
+
+      <div className="card rounded-xl p-4 mb-4" style={{background:T.surface,border:"1px solid "+T.line}}>
+        <h3 style={{fontSize:13.5,fontWeight:600,marginBottom:3}}>Top posts this period</h3>
+        <p style={{fontSize:11.5,color:T.faint,marginBottom:10}}>{cur.postCount} post{cur.postCount!==1?"s":""} published · ranked by engagement</p>
+        {cur.topPosts.length===0? <p style={{fontSize:12.5,color:T.faint}}>No posts published in this period.</p> :
+         <div className="rounded-lg overflow-hidden" style={{border:"1px solid "+T.lineSoft}}>
+           <div className="grid px-3 py-2 text-xs" style={{gridTemplateColumns:"2fr .9fr .8fr .8fr",background:T.surface2,color:T.faint,fontFamily:T.mono}}>
+             <span>POST</span><span className="text-right">REACH</span><span className="text-right">ENG%</span><span className="text-right">SAVES</span>
+           </div>
+           {cur.topPosts.map(({p,s})=><div key={p.id} className="grid px-3 py-2 items-center text-sm" style={{gridTemplateColumns:"2fr .9fr .8fr .8fr",borderTop:"1px solid "+T.lineSoft}}>
+             <span className="min-w-0"><span className="truncate" style={{display:"block",fontWeight:500,fontSize:13}}>{p.title||"Untitled"}</span><span style={{fontSize:11,color:T.faint}}>{p.format}</span></span>
+             <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5}}>{fmt(s.reach)}</span>
+             <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5,color:T.brass}}>{er(s).toFixed(1)}</span>
+             <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5}}>{fmt(s.saves)}</span>
+           </div>)}
+         </div>}
+      </div>
+
+      <p style={{fontSize:10.5,color:T.faint,textAlign:"center",marginTop:14}}>Prepared by Story &amp; Motion · {client.name} · {r.label}</p>
+    </div>
+  </div>;
+}
+function Metric({label,v,cur,prev,tone}){
+  const has=prev>0; const dp=has?((cur-prev)/prev*100):null; const up=dp!=null&&dp>=0;
+  return <div className="card rounded-xl p-3.5" style={{background:T.surface,border:"1px solid "+T.line}}>
+    <div style={{color:T.faint,fontSize:11.5}}>{label}</div>
+    <div className="flex items-end justify-between gap-2 mt-1.5">
+      <div style={{fontSize:22,fontWeight:600,fontFamily:T.mono,color:tone||T.ink}}>{v}</div>
+      {dp!=null && <span style={{fontSize:11.5,fontFamily:T.mono,fontWeight:600,color:up?T.good:T.bad}}>{up?"▲":"▼"} {Math.abs(dp).toFixed(0)}%</span>}
+    </div>
+  </div>;
 }
 
 /* --------------------------- bits --------------------------- */
