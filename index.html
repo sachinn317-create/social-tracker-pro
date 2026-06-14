@@ -3,30 +3,24 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Social Tracker Pro — Story &amp; Motion</title>
+<title>Social Tracker — Story &amp; Motion</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  html, body, #root { height: 100%; margin: 0; background: #0D0D0F; }
-  *::-webkit-scrollbar { height: 8px; width: 8px; }
-  *::-webkit-scrollbar-thumb { background: #2A2A30; border-radius: 4px; }
-  input, select, textarea { outline: none; }
-  input:focus, select:focus, textarea:focus { border-color: #C6A15B !important; }
-  .sm-btn { transition: all .15s ease; }
-  .sm-btn:hover { filter: brightness(1.12); }
-  .row-hover:hover { background: #1B1B1F; }
-  .spin { animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce){ *{ transition:none!important; animation:none!important } }
-  .ai-report h2{font-size:18px;font-weight:600;margin:18px 0 8px;color:#ECE7DD}
-  .ai-report h3{font-size:15px;font-weight:600;margin:16px 0 6px;color:#C6A15B}
-  .ai-report h4{font-size:13px;font-weight:600;margin:12px 0 4px;color:#ECE7DD}
-  .ai-report p{font-size:13.5px;line-height:1.6;color:#C9C4BB;margin:6px 0}
-  .ai-report ul,.ai-report ol{margin:6px 0 6px 18px;color:#C9C4BB;font-size:13.5px;line-height:1.6}
-  .ai-report li{margin:3px 0}
-  .ai-report strong{color:#ECE7DD}
+  html,body,#root{height:100%;margin:0;background:#FAF9F6;}
+  *::-webkit-scrollbar{height:9px;width:9px}
+  *::-webkit-scrollbar-thumb{background:#E0DBD0;border-radius:5px}
+  input,select,textarea{outline:none}
+  input:focus,select:focus,textarea:focus{border-color:#B08833 !important}
+  .sm-btn{transition:all .15s ease}
+  .sm-btn:hover{filter:brightness(.97)}
+  .row-hover:hover{background:#F4F2ED}
+  .spin{animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
@@ -35,554 +29,490 @@
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useMemo } = React;
 
+/* ================================================================
+   CONFIG — paste your two Supabase values between the quotes.
+   Find them in Supabase → Project Settings → API.
+   (The anon key is safe to put here — your row-level security is
+   what protects the data, not the secrecy of this key.)
+================================================================ */
+const SUPABASE_URL = "https://hzqjtbgwbciqlwsdafmi.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6cWp0Ymd3YmNpcWx3c2RhZm1pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MTg4MDMsImV4cCI6MjA5Njk5NDgwM30.xExKTiwurfYx5fPKe0hWWWPbzNndaElAeQXfajUWVMM";
+/* ================================================================ */
+
 const T = {
-  bg:"#0D0D0F", panel:"#151518", panel2:"#1B1B1F", raise:"#202025",
-  line:"#2A2A30", lineSoft:"#222227", text:"#ECE7DD", sub:"#9A958C",
-  faint:"#65605A", brass:"#C6A15B", brassDim:"#85703B", steel:"#7FA6B8",
-  good:"#93BD86", warn:"#C98E6B", bad:"#BF6F62",
+  bg:"#FAF9F6", surface:"#FFFFFF", surface2:"#F4F2ED", line:"#E7E2D7", lineSoft:"#EFEBE2",
+  ink:"#1C1A16", sub:"#6C665C", faint:"#9C968B",
+  brass:"#A87E2E", brassSoft:"#F3EAD2", steel:"#3D6678", good:"#3C7A4C", warn:"#B07A2E", bad:"#AF4329",
   mono:"ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace",
   sans:"'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif",
 };
-const PROJECTS_KEY="smx_projects", CURRENT_KEY="smx_current";
-const postsKey=(id)=>"smx_posts_"+id, reportKey=(id)=>"smx_report_"+id;
-const INDUSTRIES=["Hotel","Dental","Aesthetics","Restaurant","Other"];
+
+const FORMATS = ["Reel","Carousel","Single image","Story"];
+const CHECKPOINTS = ["1d","3d","7d","30d","custom"];
+
+const configured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
+const sb = configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 /* icons */
 const ICONS={
-  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
   plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
-  "plus-circle":'<circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/>',
-  "bar-chart":'<path d="M3 3v18h18"/><path d="M7 16v-5"/><path d="M12 16V8"/><path d="M17 16v-3"/>',
-  "layout-grid":'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
-  sparkles:'<path d="M12 3l1.8 5.4L19 10l-5.2 1.6L12 17l-1.8-5.4L5 10l5.2-1.6z"/>',
-  clapperboard:'<path d="M3 9l1-3.5a2 2 0 0 1 2.4-1.4l12 3.2a2 2 0 0 1 1.4 2.4L21 9"/><path d="M3 9h18v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M7 5l1 4"/><path d="M12 4l1 4"/><path d="M17 5l1 4"/>',
-  eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
-  "trending-up":'<path d="M22 7l-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
-  bookmark:'<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
-  "user-plus":'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
-  search:'<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/>',
-  film:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18"/><path d="M17 3v18"/><path d="M3 12h18"/><path d="M3 7.5h4"/><path d="M3 16.5h4"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/>',
-  images:'<rect x="3" y="3" width="14" height="14" rx="2"/><path d="M21 7v12a2 2 0 0 1-2 2H7"/>',
-  image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/>',
-  pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
-  trash:'<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
-  heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/>',
-  message:'<path d="M21 11.5a8.4 8.4 0 0 1-12.8 7.2L3 21l1.3-5.2A8.4 8.4 0 1 1 21 11.5z"/>',
-  send:'<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
-  music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
-  hash:'<path d="M4 9h16"/><path d="M4 15h16"/><path d="M10 3L8 21"/><path d="M16 3l-2 18"/>',
-  "align-left":'<path d="M21 6H3"/><path d="M15 12H3"/><path d="M17 18H3"/>',
-  x:'<path d="M18 6L6 18"/><path d="M6 6l12 12"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
   folder:'<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/>',
-  "chevron-down":'<path d="M6 9l6 6 6-6"/>',
+  chevron:'<path d="M6 9l6 6 6-6"/>',
+  trash:'<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+  x:'<path d="M18 6L6 18"/><path d="M6 6l12 12"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   loader:'<path d="M21 12a9 9 0 1 1-6.2-8.6"/>',
+  eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>',
+  bookmark:'<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+  target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/>',
   check:'<path d="M20 6L9 17l-5-5"/>',
-  alert:'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
 };
 function Icon({name,size=16,color="currentColor",style,cls}){
-  return <svg className={cls} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,...style}}
-    dangerouslySetInnerHTML={{__html:ICONS[name]||""}}/>;
+  return <svg className={cls} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,...style}} dangerouslySetInnerHTML={{__html:ICONS[name]||""}}/>;
 }
-const FORMATS=[{key:"Reel",icon:"film"},{key:"Carousel",icon:"images"},{key:"Single image",icon:"image"},{key:"Story",icon:"clapperboard"}];
 
 /* helpers */
 const num=v=>isNaN(parseFloat(v))?0:parseFloat(v);
 const fmt=n=>{n=num(n);if(n>=1e6)return(n/1e6).toFixed(n%1e6?1:0)+"M";if(n>=1e3)return(n/1e3).toFixed(n%1e3?1:0)+"k";return String(Math.round(n));};
-const pct=n=>num(n).toFixed(1)+"%";
-const interactions=p=>num(p.likes)+num(p.comments)+num(p.shares)+num(p.saves);
-const er=p=>num(p.reach)>0?(interactions(p)/num(p.reach))*100:0;
-const impact=p=>num(p.reach)>0?((num(p.likes)+num(p.comments)*2+num(p.shares)*3+num(p.saves)*3)/num(p.reach))*100:0;
-const parseTags=s=>(s||"").split(/[\s,]+/).map(t=>t.trim().replace(/^#/,"").toLowerCase()).filter(Boolean);
-const weekday=d=>["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(d+"T00:00").getDay()];
-const captionLen=p=>(p.caption||"").length;
-const hasQ=p=>/\?/.test(p.caption||"");
-const CTA_RX=/(link in bio|comment|save this|save it|share|tag a|dm |book|tap|follow|swipe|sign up|enquire|enquiry)/i;
-const hasCTA=p=>CTA_RX.test(p.caption||"");
-const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const blank=()=>({id:uid(),title:"",format:"Reel",date:new Date().toISOString().slice(0,10),caption:"",hashtags:"",music:"",reach:"",likes:"",comments:"",shares:"",saves:"",follows:""});
+const interactions=s=>num(s.likes)+num(s.comments)+num(s.shares)+num(s.saves);
+const er=s=>num(s.reach)>0?(interactions(s)/num(s.reach))*100:0;
+const nowLocal=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16);};
+const toISO=v=>v?new Date(v).toISOString():null;
+const fmtDT=iso=>{if(!iso)return"—";const d=new Date(iso);return d.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"})+" · "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});};
+const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/86400000);
+const suggestCheckpoint=(pub,meas)=>{const d=daysBetween(pub,meas);if(d<=1)return"1d";if(d<=3)return"3d";if(d<=7)return"7d";if(d<=30)return"30d";return"custom";};
 
-const SAMPLE=[
-  {title:"Suite reveal — golden hour",format:"Reel",date:"2026-05-04",caption:"The 6am light hits different up here ☀️ Save this for your next escape. Link in bio to book direct.",hashtags:"#boutiquehotel #luxurytravel #hotelreels #goldenhour",music:"Aphex — Avril 14th",reach:41200,likes:2380,comments:142,shares:410,saves:1290,follows:86},
-  {title:"Terrace dinner ambience",format:"Reel",date:"2026-05-12",caption:"Dinner with a view. Tag who you'd bring.",hashtags:"#hotelrestaurant #finedining #terrace #luxuryhotel",music:"Men I Trust — Show Me How",reach:28700,likes:1610,comments:95,shares:188,saves:540,follows:41},
-  {title:"Spa morning ritual",format:"Reel",date:"2026-05-21",caption:"Slow mornings only. Save this for the weekend you deserve 🤍",hashtags:"#spa #wellness #luxuryhotel #hotelreels",music:"Men I Trust — Show Me How",reach:33500,likes:1980,comments:120,shares:305,saves:980,follows:73},
-  {title:"Room tour — the corner suite",format:"Carousel",date:"2026-05-27",caption:"Swipe through your next stay.",hashtags:"#hotel #roomtour #boutiquehotel",music:"",reach:11200,likes:610,comments:44,shares:52,saves:300,follows:28},
-].map(p=>({...blank(),...p}));
+/* ============================ ROOT ============================ */
+function Root(){
+  const [session,setSession]=useState(null);
+  const [profile,setProfile]=useState(null);
+  const [booting,setBooting]=useState(true);
 
-/* storage */
-const get=(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb;}catch{return fb;}};
-const set=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
+  useEffect(()=>{
+    if(!configured)return;
+    sb.auth.getSession().then(({data})=>{setSession(data.session);if(!data.session)setBooting(false);});
+    const {data:sub}=sb.auth.onAuthStateChange((_e,s)=>{setSession(s);if(!s){setProfile(null);setBooting(false);}});
+    return ()=>sub.subscription.unsubscribe();
+  },[]);
 
-/* markdown */
-function mdToHtml(md){
-  let h=(md||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  h=h.replace(/^### (.*)$/gm,"<h4>$1</h4>").replace(/^## (.*)$/gm,"<h3>$1</h3>").replace(/^# (.*)$/gm,"<h2>$1</h2>");
-  h=h.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");
-  h=h.replace(/(?:^|\n)((?:[-*] .*(?:\n|$))+)/g,(m,b)=>"\n<ul>"+b.trim().split("\n").map(l=>"<li>"+l.replace(/^[-*]\s+/,"")+"</li>").join("")+"</ul>");
-  h=h.replace(/(?:^|\n)((?:\d+\. .*(?:\n|$))+)/g,(m,b)=>"\n<ol>"+b.trim().split("\n").map(l=>"<li>"+l.replace(/^\d+\.\s+/,"")+"</li>").join("")+"</ol>");
-  h=h.split(/\n{2,}/).map(blk=>{const t=blk.trim();if(!t)return"";return /^<(h\d|ul|ol)/.test(t)?t:"<p>"+t.replace(/\n/g,"<br>")+"</p>";}).join("\n");
-  return h;
+  useEffect(()=>{
+    if(!session)return;
+    (async()=>{
+      const {data}=await sb.from("profiles").select("*").eq("id",session.user.id).single();
+      setProfile(data||{id:session.user.id,role:"client",client_id:null});
+      setBooting(false);
+    })();
+  },[session]);
+
+  if(!configured) return <ConfigNeeded/>;
+  if(booting) return <Splash/>;
+  if(!session) return <Login/>;
+  if(profile && profile.role==="admin") return <AdminApp session={session}/>;
+  return <ClientApp session={session} profile={profile}/>;
 }
 
-/* ============================ APP ============================ */
-function App(){
-  const [projects,setProjects]=useState(()=>{
-    let p=get(PROJECTS_KEY,null);
-    if(!p||!p.length){p=[{id:uid(),name:"My Brand",industry:"Hotel",createdAt:Date.now()}];set(PROJECTS_KEY,p);}
-    return p;
-  });
-  const [currentId,setCurrentId]=useState(()=>get(CURRENT_KEY,null)||projects[0].id);
-  const project=projects.find(p=>p.id===currentId)||projects[0];
+function Shell({children}){
+  return <div style={{background:T.bg,color:T.ink,fontFamily:T.sans,minHeight:"100%"}} className="w-full">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">{children}</div></div>;
+}
+function Splash(){return <Shell><div className="flex items-center justify-center py-24"><Icon name="loader" size={26} color={T.brass} cls="spin"/></div></Shell>;}
 
-  const [posts,setPosts]=useState(()=>get(postsKey(project.id),[]));
-  const [tab,setTab]=useState("overview");
-  const [editing,setEditing]=useState(null);
-  const [projModal,setProjModal]=useState(null);
-  const [query,setQuery]=useState(""); const [filterFmt,setFilterFmt]=useState("All"); const [sortKey,setSortKey]=useState("date");
-
-  useEffect(()=>{set(PROJECTS_KEY,projects);},[projects]);
-  useEffect(()=>{set(CURRENT_KEY,currentId);setPosts(get(postsKey(currentId),[]));setTab("overview");},[currentId]);
-  useEffect(()=>{set(postsKey(project.id),posts);},[posts]);
-
-  const upsert=p=>{setPosts(cur=>{const i=cur.findIndex(x=>x.id===p.id);if(i===-1)return[p,...cur];const n=[...cur];n[i]=p;return n;});setEditing(null);};
-  const remove=id=>setPosts(cur=>cur.filter(x=>x.id!==id));
-
-  const saveProject=pr=>{
-    setProjects(cur=>{const i=cur.findIndex(x=>x.id===pr.id);if(i===-1)return[...cur,pr];const n=[...cur];n[i]=pr;return n;});
-    setCurrentId(pr.id);setProjModal(null);
-  };
-  const deleteProject=id=>{
-    if(projects.length<=1){window.alert("Keep at least one project.");return;}
-    if(!window.confirm("Delete this project and its data?"))return;
-    try{localStorage.removeItem(postsKey(id));localStorage.removeItem(reportKey(id));}catch{}
-    const rest=projects.filter(p=>p.id!==id);setProjects(rest);setCurrentId(rest[0].id);setProjModal(null);
-  };
-
-  const exportCSV=()=>{
-    const cols=["title","format","date","reach","likes","comments","shares","saves","follows","engagement_%","music","hashtags","caption"];
-    const rows=posts.map(p=>[p.title,p.format,p.date,p.reach,p.likes,p.comments,p.shares,p.saves,p.follows,er(p).toFixed(2),p.music,p.hashtags,(p.caption||"").replace(/\n/g," ")]);
-    const esc=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
-    const csv=[cols,...rows].map(r=>r.map(esc).join(",")).join("\n");
-    const url=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
-    const a=document.createElement("a");a.href=url;a.download=project.name.replace(/\s+/g,"-").toLowerCase()+"-"+new Date().toISOString().slice(0,10)+".csv";a.click();URL.revokeObjectURL(url);
-  };
-
-  return (
-    <div style={{background:T.bg,color:T.text,fontFamily:T.sans,minHeight:"100%"}} className="w-full">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <TopBar project={project} projects={projects} setCurrentId={setCurrentId}
-          onNewProject={()=>setProjModal({id:uid(),name:"",industry:"Hotel",createdAt:Date.now(),_new:true})}
-          onEditProject={()=>setProjModal({...project})}
-          onAdd={()=>setEditing(blank())} onExport={exportCSV} hasData={posts.length>0}/>
-        <Tabs tab={tab} setTab={setTab}/>
-        {tab==="ai" ? (
-          <AITab project={project} posts={posts}/>
-        ) : posts.length===0 ? (
-          <EmptyState onAdd={()=>setEditing(blank())} onSample={()=>setPosts(SAMPLE)}/>
-        ) : tab==="overview" ? (
-          <Overview posts={posts}/>
-        ) : tab==="posts" ? (
-          <PostsView posts={posts} query={query} setQuery={setQuery} filterFmt={filterFmt} setFilterFmt={setFilterFmt} sortKey={sortKey} setSortKey={setSortKey} onEdit={setEditing} onDelete={remove}/>
-        ) : (
-          <Insights posts={posts}/>
-        )}
-        <Footer count={posts.length} project={project} onClear={()=>posts.length&&window.confirm("Clear all content in this project?")&&setPosts([])}/>
-      </div>
-      {editing&&<PostForm initial={editing} onSave={upsert} onClose={()=>setEditing(null)}/>}
-      {projModal&&<ProjectForm initial={projModal} onSave={saveProject} onDelete={deleteProject} onClose={()=>setProjModal(null)}/>}
-    </div>
-  );
+function ConfigNeeded(){
+  return <Shell><div className="rounded-xl p-6 mt-10" style={{background:T.surface,border:"1px solid "+T.line,maxWidth:560,margin:"40px auto"}}>
+    <h2 style={{fontSize:18,fontWeight:700}}>Almost there — add your Supabase keys</h2>
+    <p style={{color:T.sub,fontSize:14,marginTop:8,lineHeight:1.6}}>Open this file and paste your <strong>Project URL</strong> and <strong>anon public key</strong> into the CONFIG block near the top (Supabase → Project Settings → API). Then redeploy.</p>
+  </div></Shell>;
 }
 
-/* --------------------------- TOP BAR -------------------------- */
-function TopBar({project,projects,setCurrentId,onNewProject,onEditProject,onAdd,onExport,hasData}){
-  const [open,setOpen]=useState(false);
-  return (
-    <div className="mb-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2" style={{color:T.faint,fontFamily:T.mono,fontSize:11,letterSpacing:"0.18em"}}>
-            <span>STORY &amp; MOTION</span><span style={{color:T.brass}}>·</span><span>PRO</span>
-          </div>
-          <h1 style={{fontSize:25,fontWeight:600,letterSpacing:"-0.02em",marginTop:4}}>Social Tracker</h1>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {hasData&&<button onClick={onExport} className="sm-btn flex items-center gap-1.5 px-3 py-2 rounded-md text-sm" style={{background:T.panel,border:"1px solid "+T.line,color:T.sub}}><Icon name="download" size={15} color={T.sub}/><span className="hidden sm:inline">Export</span></button>}
-          <button onClick={onAdd} className="sm-btn flex items-center gap-1.5 px-3.5 py-2 rounded-md text-sm font-medium" style={{background:T.brass,color:"#1a1407"}}><Icon name="plus" size={16} color="#1a1407"/> Log post</button>
-        </div>
+/* ============================ LOGIN =========================== */
+function Login(){
+  const [email,setEmail]=useState(""); const [pw,setPw]=useState("");
+  const [err,setErr]=useState(null); const [busy,setBusy]=useState(false);
+  const submit=async()=>{
+    setErr(null);setBusy(true);
+    const {error}=await sb.auth.signInWithPassword({email:email.trim(),password:pw});
+    setBusy(false);
+    if(error)setErr(error.message);
+  };
+  return <Shell>
+    <div style={{maxWidth:380,margin:"60px auto"}}>
+      <div className="text-center mb-7">
+        <div style={{fontFamily:T.mono,fontSize:11,letterSpacing:"0.2em",color:T.faint}}>STORY &amp; MOTION</div>
+        <h1 style={{fontSize:24,fontWeight:700,marginTop:6}}>Social Tracker</h1>
+        <p style={{color:T.sub,fontSize:13,marginTop:4}}>Sign in to your reporting dashboard.</p>
       </div>
-
-      {/* project switcher */}
-      <div className="mt-4 flex items-center gap-2 relative">
-        <button onClick={()=>setOpen(o=>!o)} className="sm-btn flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{background:T.panel,border:"1px solid "+T.line}}>
-          <Icon name="folder" size={15} color={T.brass}/>
-          <span style={{fontWeight:600}}>{project.name}</span>
-          <span style={{fontSize:11,color:T.faint,fontFamily:T.mono,padding:"1px 6px",border:"1px solid "+T.line,borderRadius:5}}>{project.industry}</span>
-          <Icon name="chevron-down" size={14} color={T.sub}/>
+      <div className="rounded-xl p-5" style={{background:T.surface,border:"1px solid "+T.line}}>
+        <label className="block mb-3"><span style={{fontSize:12,color:T.sub}}>Email</span>
+          <input value={email} onChange={e=>setEmail(e.target.value)} type="email" className="w-full mt-1 px-3 py-2.5 rounded-lg text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.ink}}/></label>
+        <label className="block mb-4"><span style={{fontSize:12,color:T.sub}}>Password</span>
+          <input value={pw} onChange={e=>setPw(e.target.value)} type="password" onKeyDown={e=>e.key==="Enter"&&submit()} className="w-full mt-1 px-3 py-2.5 rounded-lg text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.ink}}/></label>
+        {err&&<div className="rounded-lg px-3 py-2 mb-3 text-sm" style={{background:"#FBEEEA",color:T.bad,border:"1px solid #F0D4CC"}}>{err}</div>}
+        <button onClick={submit} disabled={busy} className="sm-btn w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2" style={{background:T.brass,color:"#fff",opacity:busy?.7:1}}>
+          {busy&&<Icon name="loader" size={15} color="#fff" cls="spin"/>} Sign in
         </button>
-        <button onClick={onEditProject} className="sm-btn p-2 rounded-lg" style={{background:T.panel,border:"1px solid "+T.line}} title="Edit project"><Icon name="pencil" size={14} color={T.sub}/></button>
-        {open&&(
-          <>
-            <div className="fixed inset-0 z-10" onClick={()=>setOpen(false)}/>
-            <div className="absolute z-20 top-full mt-1 left-0 rounded-lg overflow-hidden w-64" style={{background:T.panel2,border:"1px solid "+T.line,boxShadow:"0 10px 30px rgba(0,0,0,.5)"}}>
-              {projects.map(p=>(
-                <button key={p.id} onClick={()=>{setCurrentId(p.id);setOpen(false);}} className="row-hover w-full text-left px-3 py-2.5 flex items-center justify-between gap-2" style={{borderBottom:"1px solid "+T.lineSoft}}>
-                  <span className="flex items-center gap-2 min-w-0"><Icon name="folder" size={14} color={p.id===project.id?T.brass:T.faint}/><span className="truncate" style={{fontSize:13,fontWeight:p.id===project.id?600:400}}>{p.name}</span></span>
-                  <span style={{fontSize:10.5,color:T.faint,fontFamily:T.mono}}>{p.industry}</span>
-                </button>
-              ))}
-              <button onClick={()=>{setOpen(false);onNewProject();}} className="row-hover w-full text-left px-3 py-2.5 flex items-center gap-2" style={{color:T.brass}}>
-                <Icon name="plus-circle" size={15} color={T.brass}/><span style={{fontSize:13,fontWeight:600}}>New project</span>
-              </button>
-            </div>
-          </>
-        )}
       </div>
+      <p style={{color:T.faint,fontSize:11.5,textAlign:"center",marginTop:12}}>Accounts are created by Story &amp; Motion. Trouble signing in? Contact your account manager.</p>
     </div>
-  );
+  </Shell>;
 }
 
-/* ---------------------------- TABS ---------------------------- */
-function Tabs({tab,setTab}){
-  const items=[{k:"overview",label:"Overview",icon:"bar-chart"},{k:"posts",label:"Posts",icon:"layout-grid"},{k:"insights",label:"What's working",icon:"sparkles"},{k:"ai",label:"AI strategy",icon:"sparkles"}];
-  return (
-    <div className="flex gap-1 mb-6 overflow-x-auto" style={{borderBottom:"1px solid "+T.line}}>
-      {items.map(({k,label,icon})=>(
-        <button key={k} onClick={()=>setTab(k)} className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-sm sm-btn whitespace-nowrap"
-          style={{color:tab===k?T.text:T.sub,borderBottom:"2px solid "+(tab===k?T.brass:"transparent"),marginBottom:-1,fontWeight:tab===k?600:400}}>
-          <Icon name={icon} size={15} color={k==="ai"?T.brass:(tab===k?T.text:T.sub)}/> {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/* -------------------------- AI TAB ---------------------------- */
-function AITab({project,posts}){
-  const [state,setState]=useState({loading:false,error:null});
-  const [pw,setPw]=useState(()=>{try{return sessionStorage.getItem("smx_pw")||"";}catch{return"";}});
-  const setPassword=v=>{setPw(v);try{sessionStorage.setItem("smx_pw",v);}catch{}};
-  const [report,setReport]=useState(()=>get(reportKey(project.id),null));
-  useEffect(()=>{setReport(get(reportKey(project.id),null));setState({loading:false,error:null});},[project.id]);
-
-  const run=async()=>{
-    if(posts.length<2){setState({loading:false,error:"Log at least 2 posts before generating a report — Claude needs something to compare."});return;}
-    setState({loading:true,error:null});
-    try{
-      const compact=posts.slice(0,80).map(p=>({title:p.title,format:p.format,date:p.date,reach:num(p.reach),likes:num(p.likes),comments:num(p.comments),shares:num(p.shares),saves:num(p.saves),follows:num(p.follows),engagement:+er(p).toFixed(2),music:p.music,hashtags:p.hashtags,caption:p.caption}));
-      const res=await fetch("/api/analyze",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({industry:project.industry,projectName:project.name,posts:compact,password:pw})});
-      if(!res.ok){const t=await res.text();throw new Error("Server "+res.status+" — "+t.slice(0,160));}
-      const data=await res.json();
-      const obj={text:data.report||"No report returned.",at:Date.now()};
-      setReport(obj);set(reportKey(project.id),obj);setState({loading:false,error:null});
-    }catch(e){
-      const msg=/Failed to fetch|NetworkError/.test(e.message)?"Couldn't reach the AI backend. This feature only works on the deployed (Vercel) version with your API key set — see the README. The rest of the tracker works offline.":e.message;
-      setState({loading:false,error:msg});
-    }
-  };
-
-  return (
+function Header({title,sub,email,right}){
+  return <div className="flex items-start justify-between gap-4 mb-6">
     <div>
-      <div className="rounded-xl p-5 mb-4" style={{background:T.panel,border:"1px solid "+T.brassDim}}>
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="max-w-md">
-            <h3 style={{fontSize:16,fontWeight:600}}>Claude analyses <span style={{color:T.brass}}>{project.name}</span></h3>
-            <p style={{color:T.sub,fontSize:13,marginTop:4}}>A senior {project.industry.toLowerCase()} social strategist reads this project's numbers and returns what's working, what isn't, and a concrete 30-day plan with content ideas.</p>
-          </div>
-          <button onClick={run} disabled={state.loading} className="sm-btn flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium" style={{background:T.brass,color:"#1a1407",opacity:state.loading?0.7:1}}>
-            <Icon name={state.loading?"loader":"sparkles"} size={16} color="#1a1407" cls={state.loading?"spin":""}/>
-            {state.loading?"Analysing…":report?"Regenerate report":"Generate report"}
-          </button>
-        </div>
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <input type="password" value={pw} onChange={e=>setPassword(e.target.value)} placeholder="Access password (if your team set one)"
-            className="px-3 py-1.5 rounded-md text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.text,maxWidth:280,width:"100%"}}/>
-        </div>
-        <p style={{color:T.faint,fontSize:11.5,marginTop:10,fontFamily:T.mono}}>Uses your Anthropic API · roughly a few pence per report · {posts.length} posts in this project</p>
-      </div>
-
-      {state.error&&(
-        <div className="rounded-lg px-4 py-3 mb-4 flex gap-2.5 items-start" style={{background:T.panel,border:"1px solid "+T.bad}}>
-          <Icon name="alert" size={16} color={T.bad} style={{marginTop:1}}/>
-          <span style={{fontSize:13,color:T.text,lineHeight:1.5}}>{state.error}</span>
-        </div>
-      )}
-
-      {state.loading&&(
-        <div className="rounded-xl p-8 flex flex-col items-center text-center" style={{background:T.panel,border:"1px solid "+T.line}}>
-          <Icon name="loader" size={26} color={T.brass} cls="spin"/>
-          <p style={{color:T.sub,fontSize:13,marginTop:12}}>Reading {posts.length} posts, finding the patterns, writing your strategy…</p>
-        </div>
-      )}
-
-      {!state.loading&&report&&(
-        <div className="rounded-xl p-5" style={{background:T.panel,border:"1px solid "+T.line}}>
-          <div className="flex items-center gap-2 mb-2" style={{color:T.faint,fontSize:11,fontFamily:T.mono,letterSpacing:"0.1em"}}>
-            <Icon name="check" size={13} color={T.good}/> GENERATED {new Date(report.at).toLocaleString()}
-          </div>
-          <div className="ai-report" dangerouslySetInnerHTML={{__html:mdToHtml(report.text)}}/>
-        </div>
-      )}
-
-      {!state.loading&&!report&&!state.error&&(
-        <div className="rounded-xl flex flex-col items-center justify-center text-center py-14 px-6" style={{background:T.panel,border:"1px dashed "+T.line}}>
-          <Icon name="sparkles" size={30} color={T.brass}/>
-          <p style={{color:T.sub,fontSize:14,maxWidth:360,marginTop:12}}>No report yet. Log your posts, then hit <strong style={{color:T.text}}>Generate report</strong> for Claude's read on what to do next.</p>
-        </div>
-      )}
+      <div style={{fontFamily:T.mono,fontSize:11,letterSpacing:"0.18em",color:T.faint}}>STORY &amp; MOTION</div>
+      <h1 style={{fontSize:24,fontWeight:700,letterSpacing:"-0.02em",marginTop:3}}>{title}</h1>
+      {sub&&<p style={{color:T.sub,fontSize:13,marginTop:2}}>{sub}</p>}
     </div>
-  );
-}
-
-/* ------------------------- EMPTY STATE ------------------------ */
-function EmptyState({onAdd,onSample}){
-  return (
-    <div className="rounded-xl flex flex-col items-center justify-center text-center py-16 px-6" style={{background:T.panel,border:"1px dashed "+T.line}}>
-      <Icon name="clapperboard" size={34} color={T.brass}/>
-      <h3 style={{fontSize:18,fontWeight:600,marginTop:14}}>Nothing logged in this project yet</h3>
-      <p style={{color:T.sub,fontSize:14,maxWidth:380,marginTop:6}}>Add posts with their numbers from Instagram Insights. Then the analytics and AI strategy come alive.</p>
-      <div className="flex gap-2 mt-6">
-        <button onClick={onAdd} className="sm-btn px-4 py-2 rounded-md text-sm font-medium" style={{background:T.brass,color:"#1a1407"}}>Log your first post</button>
-        <button onClick={onSample} className="sm-btn px-4 py-2 rounded-md text-sm" style={{background:T.panel2,border:"1px solid "+T.line,color:T.sub}}>Load sample data</button>
-      </div>
+    <div className="flex items-center gap-2 shrink-0">
+      {right}
+      <button onClick={()=>sb.auth.signOut()} className="sm-btn flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm" style={{background:T.surface,border:"1px solid "+T.line,color:T.sub}} title={email}>
+        <Icon name="logout" size={15} color={T.sub}/><span className="hidden sm:inline">Sign out</span>
+      </button>
     </div>
-  );
-}
-
-/* --------------------------- OVERVIEW ------------------------- */
-function Overview({posts}){
-  const k=useMemo(()=>{
-    const reach=posts.reduce((a,p)=>a+num(p.reach),0);
-    const follows=posts.reduce((a,p)=>a+num(p.follows),0);
-    const avgEr=posts.length?posts.reduce((a,p)=>a+er(p),0)/posts.length:0;
-    const saves=posts.reduce((a,p)=>a+num(p.saves),0);
-    const top=[...posts].sort((a,b)=>impact(b)-impact(a))[0];
-    return{reach,follows,avgEr,saves,top};
-  },[posts]);
-  const timeData=useMemo(()=>[...posts].sort((a,b)=>a.date.localeCompare(b.date)).map(p=>({label:p.date.slice(5),value:+er(p).toFixed(1)})),[posts]);
-  return (
-    <div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <KPI icon="eye" label="Total reach" value={fmt(k.reach)} tone={T.steel}/>
-        <KPI icon="trending-up" label="Avg engagement" value={pct(k.avgEr)} tone={T.brass}/>
-        <KPI icon="bookmark" label="Total saves" value={fmt(k.saves)} tone={T.good}/>
-        <KPI icon="user-plus" label="Followers gained" value={fmt(k.follows)} tone={T.text}/>
-      </div>
-      {k.top&&(
-        <div className="rounded-xl p-4 mb-5 flex items-center gap-4" style={{background:T.panel,border:"1px solid "+T.brassDim}}>
-          <div className="shrink-0 w-11 h-11 rounded-lg flex items-center justify-center" style={{background:T.raise,border:"1px solid "+T.brassDim}}><Icon name="sparkles" size={20} color={T.brass}/></div>
-          <div className="min-w-0">
-            <div style={{fontSize:11,color:T.faint,fontFamily:T.mono,letterSpacing:"0.14em"}}>TOP PERFORMER</div>
-            <div className="truncate" style={{fontWeight:600,fontSize:15}}>{k.top.title||"Untitled"}</div>
-            <div style={{color:T.sub,fontSize:12.5}}>{k.top.format} · {pct(er(k.top))} engagement · {fmt(k.top.saves)} saves · {fmt(k.top.reach)} reach</div>
-          </div>
-        </div>
-      )}
-      <Panel title="Engagement over time" sub="Engagement rate per post, in order"><LineMini data={timeData}/></Panel>
-    </div>
-  );
-}
-function KPI({icon,label,value,tone}){
-  return (
-    <div className="rounded-xl p-3.5" style={{background:T.panel,border:"1px solid "+T.line}}>
-      <div className="flex items-center justify-between"><span style={{color:T.faint,fontSize:11.5}}>{label}</span><Icon name={icon} size={15} color={tone}/></div>
-      <div style={{fontSize:24,fontWeight:600,fontFamily:T.mono,marginTop:8,color:tone}}>{value}</div>
-    </div>
-  );
-}
-function LineMini({data}){
-  if(!data.length)return <p style={{color:T.faint,fontSize:12.5}}>Log a few posts to see the trend.</p>;
-  const W=800,H=220,pad=28,max=Math.max(...data.map(d=>d.value),1);
-  const stepX=data.length>1?(W-pad*2)/(data.length-1):0;
-  const X=i=>pad+i*stepX,Y=v=>H-pad-(v/max)*(H-pad*2);
-  const pts=data.map((d,i)=>X(i)+","+Y(d.value)).join(" ");const grid=[0,0.5,1];
-  return (
-    <svg viewBox={"0 0 "+W+" "+H} style={{width:"100%",height:"auto",display:"block"}}>
-      {grid.map((g,i)=><line key={i} x1={pad} x2={W-pad} y1={Y(max*g)} y2={Y(max*g)} stroke={T.lineSoft} strokeWidth="1"/>)}
-      {grid.map((g,i)=><text key={"t"+i} x={4} y={Y(max*g)+4} fill={T.faint} fontSize="11" fontFamily={T.mono}>{(max*g).toFixed(0)}%</text>)}
-      {data.length>1&&<polyline points={pts} fill="none" stroke={T.brass} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>}
-      {data.map((d,i)=><circle key={i} cx={X(i)} cy={Y(d.value)} r="4" fill={T.brass}><title>{d.label}: {d.value}%</title></circle>)}
-    </svg>
-  );
-}
-
-function Panel({title,sub,children,right}){
-  return (
-    <div className="rounded-xl p-4 mb-4" style={{background:T.panel,border:"1px solid "+T.line}}>
-      <div className="flex items-end justify-between mb-3"><div><h3 style={{fontSize:14.5,fontWeight:600}}>{title}</h3>{sub&&<p style={{color:T.faint,fontSize:12}}>{sub}</p>}</div>{right}</div>
-      {children}
-    </div>
-  );
-}
-
-/* ---------------------------- POSTS --------------------------- */
-function PostsView({posts,query,setQuery,filterFmt,setFilterFmt,sortKey,setSortKey,onEdit,onDelete}){
-  const view=useMemo(()=>{
-    let v=posts.filter(p=>{const q=query.toLowerCase();const mq=!q||(p.title+p.caption+p.hashtags+p.music).toLowerCase().includes(q);const mf=filterFmt==="All"||p.format===filterFmt;return mq&&mf;});
-    const by={date:(a,b)=>b.date.localeCompare(a.date),reach:(a,b)=>num(b.reach)-num(a.reach),engagement:(a,b)=>er(b)-er(a),saves:(a,b)=>num(b.saves)-num(a.saves),impact:(a,b)=>impact(b)-impact(a)};
-    return [...v].sort(by[sortKey]);
-  },[posts,query,filterFmt,sortKey]);
-  const Sel=({value,onChange,options})=>(<select value={value} onChange={e=>onChange(e.target.value)} className="px-2.5 py-2 rounded-md text-sm" style={{background:T.panel2,border:"1px solid "+T.line,color:T.text}}>{options.map(o=><option key={o.v} value={o.v} style={{background:T.panel2}}>{o.l}</option>)}</select>);
-  return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-md flex-1 min-w-[180px]" style={{background:T.panel2,border:"1px solid "+T.line}}>
-          <Icon name="search" size={15} color={T.faint}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search captions, tags, audio…" className="bg-transparent text-sm w-full" style={{color:T.text}}/>
-        </div>
-        <Sel value={filterFmt} onChange={setFilterFmt} options={[{v:"All",l:"All formats"},...FORMATS.map(f=>({v:f.key,l:f.key}))]}/>
-        <Sel value={sortKey} onChange={setSortKey} options={[{v:"date",l:"Newest"},{v:"engagement",l:"Top engagement"},{v:"reach",l:"Most reach"},{v:"saves",l:"Most saves"},{v:"impact",l:"Impact score"}]}/>
-      </div>
-      <div className="rounded-xl overflow-hidden" style={{border:"1px solid "+T.line}}>
-        <div className="hidden md:grid px-4 py-2.5 text-xs" style={{gridTemplateColumns:"1.8fr .9fr .8fr .8fr .8fr .8fr 64px",background:T.panel2,color:T.faint,fontFamily:T.mono,letterSpacing:"0.08em"}}>
-          <span>POST</span><span className="text-right">REACH</span><span className="text-right">ENG%</span><span className="text-right">SAVES</span><span className="text-right">SHARES</span><span className="text-right">DATE</span><span></span>
-        </div>
-        {view.map(p=><PostRow key={p.id} p={p} onEdit={onEdit} onDelete={onDelete}/>)}
-        {!view.length&&<div className="px-4 py-8 text-center text-sm" style={{color:T.faint}}>Nothing matches that filter.</div>}
-      </div>
-    </div>
-  );
-}
-function PostRow({p,onEdit,onDelete}){
-  const [open,setOpen]=useState(false);
-  const fi=(FORMATS.find(f=>f.key===p.format)||FORMATS[0]).icon;const e=er(p);const eT=e>=6?T.good:e>=2.5?T.brass:T.warn;
-  return (
-    <div style={{borderTop:"1px solid "+T.lineSoft}}>
-      <div className="row-hover grid items-center px-4 py-3 cursor-pointer gap-1" style={{gridTemplateColumns:"1.8fr .9fr .8fr .8fr .8fr .8fr 64px"}} onClick={()=>setOpen(o=>!o)}>
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{background:T.raise,border:"1px solid "+T.line}}><Icon name={fi} size={15} color={T.brass}/></span>
-          <div className="min-w-0"><div className="truncate" style={{fontSize:13.5,fontWeight:500}}>{p.title||"Untitled"}</div><div className="truncate md:hidden" style={{fontSize:11.5,color:T.faint}}>{p.format} · {p.date}</div></div>
-        </div>
-        <span className="text-right hidden md:block" style={{fontFamily:T.mono,fontSize:13,color:T.sub}}>{fmt(p.reach)}</span>
-        <span className="text-right" style={{fontFamily:T.mono,fontSize:13,color:eT}}>{e.toFixed(1)}</span>
-        <span className="text-right hidden md:block" style={{fontFamily:T.mono,fontSize:13,color:T.sub}}>{fmt(p.saves)}</span>
-        <span className="text-right hidden md:block" style={{fontFamily:T.mono,fontSize:13,color:T.sub}}>{fmt(p.shares)}</span>
-        <span className="text-right hidden md:block" style={{fontFamily:T.mono,fontSize:12,color:T.faint}}>{p.date.slice(5)}</span>
-        <div className="flex justify-end gap-1">
-          <button onClick={ev=>{ev.stopPropagation();onEdit(p);}} className="sm-btn p-1.5 rounded"><Icon name="pencil" size={14} color={T.sub}/></button>
-          <button onClick={ev=>{ev.stopPropagation();onDelete(p.id);}} className="sm-btn p-1.5 rounded"><Icon name="trash" size={14} color={T.faint}/></button>
-        </div>
-      </div>
-      {open&&(
-        <div className="px-4 pb-4 pt-1" style={{background:T.panel2}}>
-          <div className="grid sm:grid-cols-2 gap-3 mb-3">
-            <Mini icon="heart" label="Likes" v={fmt(p.likes)}/><Mini icon="message" label="Comments" v={fmt(p.comments)}/><Mini icon="send" label="Shares" v={fmt(p.shares)}/><Mini icon="user-plus" label="Followers gained" v={fmt(p.follows)}/>
-          </div>
-          {p.music&&<Detail icon="music" text={p.music}/>}
-          {p.hashtags&&<Detail icon="hash" text={parseTags(p.hashtags).map(t=>"#"+t).join("  ")}/>}
-          {p.caption&&<Detail icon="align-left" text={p.caption}/>}
-        </div>
-      )}
-    </div>
-  );
-}
-function Mini({icon,label,v}){return <div className="flex items-center gap-2"><Icon name={icon} size={14} color={T.faint}/><span style={{color:T.sub,fontSize:12.5}}>{label}</span><span style={{fontFamily:T.mono,fontSize:13,marginLeft:"auto"}}>{v}</span></div>;}
-function Detail({icon,text}){return <div className="flex gap-2 py-1.5" style={{borderTop:"1px solid "+T.lineSoft}}><Icon name={icon} size={14} color={T.faint} style={{marginTop:2}}/><span style={{color:T.sub,fontSize:12.5,lineHeight:1.5}}>{text}</span></div>;}
-
-/* --------------------------- INSIGHTS ------------------------- */
-function Insights({posts}){
-  const tagStats=useMemo(()=>{const m={};posts.forEach(p=>parseTags(p.hashtags).forEach(t=>(m[t]=m[t]||[]).push(p)));return Object.entries(m).map(([tag,ps])=>({tag,n:ps.length,er:ps.reduce((a,p)=>a+er(p),0)/ps.length,reach:ps.reduce((a,p)=>a+num(p.reach),0)/ps.length})).filter(t=>t.n>=2).sort((a,b)=>b.er-a.er);},[posts]);
-  const musicStats=useMemo(()=>{const m={};posts.forEach(p=>{const x=(p.music||"").trim();if(x)(m[x]=m[x]||[]).push(p);});return Object.entries(m).map(([music,ps])=>({music,n:ps.length,er:ps.reduce((a,p)=>a+er(p),0)/ps.length,reach:ps.reduce((a,p)=>a+num(p.reach),0)/ps.length})).sort((a,b)=>b.er-a.er);},[posts]);
-  const fmtStats=useMemo(()=>FORMATS.map(f=>{const ps=posts.filter(p=>p.format===f.key);return{format:f.key,n:ps.length,er:ps.length?ps.reduce((a,p)=>a+er(p),0)/ps.length:0};}).filter(f=>f.n>0).sort((a,b)=>b.er-a.er),[posts]);
-  const dayStats=useMemo(()=>{const order=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];const m={};posts.forEach(p=>{const d=weekday(p.date);(m[d]=m[d]||[]).push(p);});return order.filter(d=>m[d]).map(d=>({day:d,n:m[d].length,er:m[d].reduce((a,p)=>a+er(p),0)/m[d].length})).sort((a,b)=>b.er-a.er);},[posts]);
-  const cap=useMemo(()=>{const avg=arr=>arr.length?arr.reduce((a,p)=>a+er(p),0)/arr.length:0;const buckets=[{label:"Short (<100)",ps:posts.filter(p=>captionLen(p)>0&&captionLen(p)<100)},{label:"Medium (100–300)",ps:posts.filter(p=>captionLen(p)>=100&&captionLen(p)<=300)},{label:"Long (>300)",ps:posts.filter(p=>captionLen(p)>300)}].filter(b=>b.ps.length).map(b=>({label:b.label,n:b.ps.length,er:avg(b.ps)}));return{buckets,question:{yes:avg(posts.filter(hasQ)),no:avg(posts.filter(p=>!hasQ(p))),nYes:posts.filter(hasQ).length},cta:{yes:avg(posts.filter(hasCTA)),no:avg(posts.filter(p=>!hasCTA(p))),nYes:posts.filter(hasCTA).length}};},[posts]);
-  const small=posts.length<4;
-  return (
-    <div>
-      {small&&<div className="rounded-lg px-4 py-2.5 mb-4 text-sm flex items-center gap-2" style={{background:T.panel,border:"1px solid "+T.line,color:T.sub}}><Icon name="sparkles" size={14} color={T.brass}/> Early signal — log a few more posts and these patterns get sharper.</div>}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Panel title="Hashtags pulling weight" sub="Avg engagement where a tag appears (2+ posts)">{tagStats.length?<RankList rows={tagStats.slice(0,7).map(t=>({key:t.tag,label:"#"+t.tag,meta:t.n+" posts · "+fmt(t.reach)+" avg reach",value:pct(t.er),v:t.er}))} max={tagStats[0].er}/>:<Hint>Add hashtags to 2+ posts to compare them.</Hint>}</Panel>
-        <Panel title="Audio that travels" sub="Avg engagement per track">{musicStats.length?<RankList tone={T.steel} rows={musicStats.slice(0,7).map(m=>({key:m.music,label:m.music,meta:m.n+" use"+(m.n>1?"s":"")+" · "+fmt(m.reach)+" avg reach",value:pct(m.er),v:m.er}))} max={musicStats[0].er}/>:<Hint>Add an audio/track name to your reels to see this.</Hint>}</Panel>
-        <Panel title="Format performance" sub="Avg engagement by post type">{fmtStats.length?<RankList rows={fmtStats.map(f=>({key:f.format,label:f.format,meta:f.n+" post"+(f.n>1?"s":""),value:pct(f.er),v:f.er}))} max={fmtStats[0].er}/>:<Hint>No posts yet.</Hint>}</Panel>
-        <Panel title="Best day to post" sub="Avg engagement by weekday">{dayStats.length?<RankList tone={T.steel} rows={dayStats.map(d=>({key:d.day,label:d.day,meta:d.n+" post"+(d.n>1?"s":""),value:pct(d.er),v:d.er}))} max={dayStats[0].er}/>:<Hint>Log posts across different days to see this.</Hint>}</Panel>
-      </div>
-      <Panel title="Caption signals" sub="What your writing is doing to engagement">
-        <div className="grid sm:grid-cols-3 gap-3">
-          <Signal title="Length" rows={cap.buckets.map(b=>({label:b.label,value:pct(b.er),sub:String(b.n)}))}/>
-          <Signal title="Asks a question?" rows={[{label:"With “?”",value:pct(cap.question.yes),sub:String(cap.question.nYes),hot:cap.question.yes>cap.question.no},{label:"Without",value:pct(cap.question.no),sub:String(posts.length-cap.question.nYes)}]}/>
-          <Signal title="Has a call-to-action?" rows={[{label:"With CTA",value:pct(cap.cta.yes),sub:String(cap.cta.nYes),hot:cap.cta.yes>cap.cta.no},{label:"Without",value:pct(cap.cta.no),sub:String(posts.length-cap.cta.nYes)}]}/>
-        </div>
-      </Panel>
-    </div>
-  );
-}
-function RankList({rows,max,tone=T.brass}){
-  return <div className="flex flex-col gap-2.5">{rows.map(r=>(
-    <div key={r.key}>
-      <div className="flex items-baseline justify-between gap-3 mb-1"><span className="truncate" style={{fontSize:13,fontWeight:500}}>{r.label}</span><span style={{fontFamily:T.mono,fontSize:13,color:tone,flexShrink:0}}>{r.value}</span></div>
-      <div className="h-1.5 rounded-full overflow-hidden" style={{background:T.raise}}><div style={{width:(max?Math.max(6,(r.v/max)*100):0)+"%",height:"100%",background:tone,opacity:0.85}}/></div>
-      <div style={{fontSize:11,color:T.faint,marginTop:3}}>{r.meta}</div>
-    </div>
-  ))}</div>;
-}
-function Signal({title,rows}){
-  return <div className="rounded-lg p-3" style={{background:T.panel2,border:"1px solid "+T.lineSoft}}>
-    <div style={{fontSize:11.5,color:T.faint,fontFamily:T.mono,letterSpacing:"0.08em",marginBottom:8}}>{title.toUpperCase()}</div>
-    {rows.map((r,i)=>(<div key={i} className="flex items-center justify-between py-1"><span className="flex items-center gap-1.5" style={{fontSize:12.5,color:T.sub}}>{r.hot&&<span style={{width:6,height:6,borderRadius:9,background:T.good,display:"inline-block"}}/>}{r.label}</span><span style={{fontFamily:T.mono,fontSize:13,color:r.hot?T.good:T.text}}>{r.value} <span style={{color:T.faint,fontSize:11}}>·{r.sub}</span></span></div>))}
   </div>;
 }
-function Hint({children}){return <p style={{color:T.faint,fontSize:12.5,padding:"8px 0"}}>{children}</p>;}
 
-/* ----------------------- PROJECT FORM ------------------------- */
-function ProjectForm({initial,onSave,onDelete,onClose}){
-  const [f,setF]=useState(initial);
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{background:"rgba(0,0,0,0.6)"}} onClick={onClose}>
-      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden" style={{background:T.panel,border:"1px solid "+T.line}} onClick={e=>e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4" style={{borderBottom:"1px solid "+T.line}}>
-          <h3 style={{fontWeight:600,fontSize:16}}>{initial._new?"New project":"Edit project"}</h3>
-          <button onClick={onClose} className="sm-btn p-1.5 rounded"><Icon name="x" size={18} color={T.sub}/></button>
+/* ========================== ADMIN APP ========================= */
+function AdminApp({session}){
+  const [clients,setClients]=useState([]);
+  const [currentId,setCurrentId]=useState(null);
+  const [tab,setTab]=useState("posts");
+  const [loading,setLoading]=useState(true);
+  const [toast,setToast]=useState(null);
+  const [newClient,setNewClient]=useState(false);
+
+  const flash=(m,bad)=>{setToast({m,bad});setTimeout(()=>setToast(null),3500);};
+  const loadClients=async()=>{
+    const {data,error}=await sb.from("clients").select("*").order("created_at");
+    if(error)flash(error.message,true);
+    setClients(data||[]);
+    if(data&&data.length&&!currentId)setCurrentId(data[0].id);
+    setLoading(false);
+  };
+  useEffect(()=>{loadClients();},[]);
+  const current=clients.find(c=>c.id===currentId);
+
+  return <Shell>
+    <Header title="Social Tracker" sub="Admin · all clients" email={session.user.email}
+      right={<ClientSwitcher clients={clients} current={current} onPick={id=>{setCurrentId(id);setTab("posts");}} onNew={()=>setNewClient(true)}/>}/>
+    {loading? <Splash/> :
+     clients.length===0 ? <Empty title="No clients yet" body="Create your first client to start logging posts." action={<button onClick={()=>setNewClient(true)} className="sm-btn px-4 py-2 rounded-lg text-sm font-semibold" style={{background:T.brass,color:"#fff"}}>Add client</button>}/> :
+     current ? <>
+       <Tabs tab={tab} setTab={setTab} items={[["posts","Posts"],["account","Account & outcomes"],["overview","Overview"]]}/>
+       {tab==="posts" && <PostsAdmin client={current} flash={flash}/>}
+       {tab==="account" && <AccountAdmin client={current} flash={flash}/>}
+       {tab==="overview" && <OverviewView client={current}/>}
+     </> : null}
+    {newClient && <ClientModal onClose={()=>setNewClient(false)} onSaved={c=>{setNewClient(false);loadClients();setCurrentId(c.id);flash("Client added.");}} flash={flash}/>}
+    {toast && <Toast {...toast}/>}
+  </Shell>;
+}
+
+function ClientSwitcher({clients,current,onPick,onNew}){
+  const [open,setOpen]=useState(false);
+  return <div className="relative">
+    <button onClick={()=>setOpen(o=>!o)} className="sm-btn flex items-center gap-2 px-3 py-2 rounded-lg text-sm" style={{background:T.surface,border:"1px solid "+T.line}}>
+      <Icon name="folder" size={15} color={T.brass}/><span style={{fontWeight:600}}>{current?current.name:"Select client"}</span>
+      {current&&<span style={{fontSize:11,color:T.sub,fontFamily:T.mono,padding:"1px 6px",border:"1px solid "+T.line,borderRadius:5}}>{current.industry}</span>}
+      <Icon name="chevron" size={14} color={T.sub}/>
+    </button>
+    {open&&<>
+      <div className="fixed inset-0 z-10" onClick={()=>setOpen(false)}/>
+      <div className="absolute z-20 top-full mt-1 right-0 rounded-lg overflow-hidden w-64" style={{background:T.surface,border:"1px solid "+T.line,boxShadow:"0 12px 30px rgba(0,0,0,.12)"}}>
+        {clients.map(c=><button key={c.id} onClick={()=>{onPick(c.id);setOpen(false);}} className="row-hover w-full text-left px-3 py-2.5 flex items-center justify-between gap-2" style={{borderBottom:"1px solid "+T.lineSoft}}>
+          <span className="flex items-center gap-2 min-w-0"><Icon name="folder" size={14} color={current&&c.id===current.id?T.brass:T.faint}/><span className="truncate" style={{fontSize:13,fontWeight:current&&c.id===current.id?600:400}}>{c.name}</span></span>
+          <span style={{fontSize:10.5,color:T.faint,fontFamily:T.mono}}>{c.industry}</span></button>)}
+        <button onClick={()=>{setOpen(false);onNew();}} className="row-hover w-full text-left px-3 py-2.5 flex items-center gap-2" style={{color:T.brass}}><Icon name="plus" size={15} color={T.brass}/><span style={{fontSize:13,fontWeight:600}}>New client</span></button>
+      </div>
+    </>}
+  </div>;
+}
+
+function Tabs({tab,setTab,items}){
+  return <div className="flex gap-1 mb-6 overflow-x-auto" style={{borderBottom:"1px solid "+T.line}}>
+    {items.map(([k,label])=><button key={k} onClick={()=>setTab(k)} className="px-3 sm:px-4 py-2.5 text-sm sm-btn whitespace-nowrap" style={{color:tab===k?T.ink:T.sub,borderBottom:"2px solid "+(tab===k?T.brass:"transparent"),marginBottom:-1,fontWeight:tab===k?600:400}}>{label}</button>)}
+  </div>;
+}
+
+/* ---- posts + snapshots (admin) ---- */
+function PostsAdmin({client,flash}){
+  const [posts,setPosts]=useState(null);
+  const [snaps,setSnaps]=useState({}); // postId -> [snapshots]
+  const [addPost,setAddPost]=useState(false);
+  const [addSnapFor,setAddSnapFor]=useState(null);
+
+  const load=async()=>{
+    const {data:p,error}=await sb.from("posts").select("*").eq("client_id",client.id).order("published_at",{ascending:false});
+    if(error){flash(error.message,true);return;}
+    setPosts(p||[]);
+    const {data:s}=await sb.from("snapshots").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
+    const by={};(s||[]).forEach(x=>{(by[x.post_id]=by[x.post_id]||[]).push(x);});
+    setSnaps(by);
+  };
+  useEffect(()=>{setPosts(null);load();},[client.id]);
+
+  const delPost=async id=>{if(!window.confirm("Delete this post and all its snapshots?"))return;const {error}=await sb.from("posts").delete().eq("id",id);if(error)flash(error.message,true);else load();};
+  const delSnap=async id=>{const {error}=await sb.from("snapshots").delete().eq("id",id);if(error)flash(error.message,true);else load();};
+
+  if(posts===null)return <Splash/>;
+  return <div>
+    <div className="flex justify-between items-center mb-4">
+      <p style={{color:T.sub,fontSize:13}}>{posts.length} post{posts.length!==1?"s":""} · add dated readings to track each one over 1/3/7/30 days.</p>
+      <button onClick={()=>setAddPost(true)} className="sm-btn flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold" style={{background:T.brass,color:"#fff"}}><Icon name="plus" size={16} color="#fff"/> New post</button>
+    </div>
+    {posts.length===0? <Empty title="No posts logged" body="Add a post, then record its numbers at each checkpoint."/> :
+     <div className="flex flex-col gap-3">{posts.map(p=><PostCard key={p.id} post={p} snaps={snaps[p.id]||[]} onAddSnap={()=>setAddSnapFor(p)} onDelete={()=>delPost(p.id)} onDelSnap={delSnap}/>)}</div>}
+    {addPost && <PostModal client={client} onClose={()=>setAddPost(false)} onSaved={()=>{setAddPost(false);load();flash("Post added.");}} flash={flash}/>}
+    {addSnapFor && <SnapshotModal post={addSnapFor} client={client} onClose={()=>setAddSnapFor(null)} onSaved={()=>{setAddSnapFor(null);load();flash("Reading saved.");}} flash={flash}/>}
+  </div>;
+}
+
+function PostCard({post,snaps,onAddSnap,onDelete,onDelSnap}){
+  const [open,setOpen]=useState(false);
+  const latest=snaps[snaps.length-1];
+  return <div className="rounded-xl" style={{background:T.surface,border:"1px solid "+T.line}}>
+    <div className="p-4 flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span style={{fontWeight:600,fontSize:14.5}}>{post.title||"Untitled"}</span>
+          <span style={{fontSize:11,color:T.sub,fontFamily:T.mono,padding:"1px 6px",background:T.surface2,borderRadius:5}}>{post.format}</span>
         </div>
-        <div className="px-5 py-4 flex flex-col gap-3">
-          <label className="block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono,letterSpacing:"0.06em"}}>CLIENT / BRAND NAME</span>
-            <input value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. The Cedar House Hotel" className="w-full mt-1 px-3 py-2 rounded-md text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.text}}/></label>
-          <label className="block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono,letterSpacing:"0.06em"}}>INDUSTRY</span>
-            <select value={f.industry} onChange={e=>setF({...f,industry:e.target.value})} className="w-full mt-1 px-3 py-2 rounded-md text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.text}}>{INDUSTRIES.map(x=><option key={x} value={x} style={{background:T.panel2}}>{x}</option>)}</select>
-            <span style={{fontSize:11,color:T.faint,marginTop:4,display:"block"}}>Industry tailors the AI strategy advice.</span></label>
-        </div>
-        <div className="flex gap-2 px-5 py-4" style={{borderTop:"1px solid "+T.line}}>
-          {!initial._new&&<button onClick={()=>onDelete(f.id)} className="sm-btn px-3 py-2.5 rounded-md text-sm" style={{background:T.panel2,border:"1px solid "+T.bad,color:T.bad}}><Icon name="trash" size={14} color={T.bad}/></button>}
-          <button onClick={onClose} className="sm-btn flex-1 py-2.5 rounded-md text-sm" style={{background:T.panel2,border:"1px solid "+T.line,color:T.sub}}>Cancel</button>
-          <button onClick={()=>f.name.trim()&&onSave({...f,_new:undefined})} className="sm-btn flex-1 py-2.5 rounded-md text-sm font-medium" style={{background:T.brass,color:"#1a1407"}}>{initial._new?"Create":"Save"}</button>
-        </div>
+        <div style={{fontSize:12,color:T.faint,marginTop:3}}>Posted {fmtDT(post.published_at)}</div>
+      </div>
+      <button onClick={onDelete} className="sm-btn p-1.5 rounded"><Icon name="trash" size={15} color={T.faint}/></button>
+    </div>
+    <div className="px-4 pb-3 flex items-center gap-4 flex-wrap" style={{borderTop:"1px solid "+T.lineSoft,paddingTop:10}}>
+      {latest? <>
+        <Stat label="latest reach" v={fmt(latest.reach)}/><Stat label="eng%" v={er(latest).toFixed(1)}/><Stat label="saves" v={fmt(latest.saves)}/><Stat label="readings" v={snaps.length}/>
+      </> : <span style={{fontSize:12.5,color:T.faint}}>No readings yet.</span>}
+      <div className="ml-auto flex gap-2">
+        {snaps.length>0&&<button onClick={()=>setOpen(o=>!o)} className="sm-btn px-2.5 py-1.5 rounded-lg text-xs" style={{border:"1px solid "+T.line,color:T.sub}}>{open?"Hide":"Timeline"}</button>}
+        <button onClick={onAddSnap} className="sm-btn flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium" style={{background:T.brassSoft,color:T.brass}}><Icon name="plus" size={13} color={T.brass}/> Add reading</button>
       </div>
     </div>
-  );
-}
-
-/* ------------------------- POST FORM -------------------------- */
-function PostForm({initial,onSave,onClose}){
-  const [f,setF]=useState(initial);const isNew=!initial.title&&!initial.reach;const set=(k,v)=>setF(s=>({...s,[k]:v}));
-  const Field=({label,k,type="text",ph,span})=>(<label className={span?"sm:col-span-2 block":"block"}><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono,letterSpacing:"0.06em"}}>{label.toUpperCase()}</span><input type={type} value={f[k]} placeholder={ph} onChange={e=>set(k,e.target.value)} className="w-full mt-1 px-3 py-2 rounded-md text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.text,fontFamily:type==="number"?T.mono:T.sans}}/></label>);
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{background:"rgba(0,0,0,0.6)"}} onClick={onClose}>
-      <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl overflow-hidden max-h-[92vh] flex flex-col" style={{background:T.panel,border:"1px solid "+T.line}} onClick={e=>e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4" style={{borderBottom:"1px solid "+T.line}}><h3 style={{fontWeight:600,fontSize:16}}>{isNew?"Log a post":"Edit post"}</h3><button onClick={onClose} className="sm-btn p-1.5 rounded"><Icon name="x" size={18} color={T.sub}/></button></div>
-        <div className="px-5 py-4 overflow-y-auto">
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Title / label" k="title" ph="Suite reveal reel" span/>
-            <label className="block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono,letterSpacing:"0.06em"}}>FORMAT</span><select value={f.format} onChange={e=>set("format",e.target.value)} className="w-full mt-1 px-3 py-2 rounded-md text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.text}}>{FORMATS.map(x=><option key={x.key} value={x.key} style={{background:T.panel2}}>{x.key}</option>)}</select></label>
-            <Field label="Date posted" k="date" type="date"/>
-            <div className="sm:col-span-2 mt-1" style={{borderTop:"1px solid "+T.lineSoft,paddingTop:8}}><span style={{fontSize:11,color:T.faint,fontFamily:T.mono,letterSpacing:"0.1em"}}>NUMBERS FROM INSIGHTS</span></div>
-            <Field label="Reach / views" k="reach" type="number" ph="0"/><Field label="Followers gained" k="follows" type="number" ph="0"/>
-            <Field label="Likes" k="likes" type="number" ph="0"/><Field label="Comments" k="comments" type="number" ph="0"/>
-            <Field label="Shares" k="shares" type="number" ph="0"/><Field label="Saves" k="saves" type="number" ph="0"/>
-            <div className="sm:col-span-2 mt-1" style={{borderTop:"1px solid "+T.lineSoft,paddingTop:8}}><span style={{fontSize:11,color:T.faint,fontFamily:T.mono,letterSpacing:"0.1em"}}>WHAT MADE THIS POST</span></div>
-            <Field label="Audio / music" k="music" ph="Track or sound name" span/>
-            <label className="sm:col-span-2 block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono,letterSpacing:"0.06em"}}>HASHTAGS</span><input value={f.hashtags} onChange={e=>set("hashtags",e.target.value)} placeholder="#hotelreels #luxurytravel …" className="w-full mt-1 px-3 py-2 rounded-md text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.text}}/></label>
-            <label className="sm:col-span-2 block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono,letterSpacing:"0.06em"}}>CAPTION</span><textarea value={f.caption} onChange={e=>set("caption",e.target.value)} rows={3} placeholder="Paste the caption…" className="w-full mt-1 px-3 py-2 rounded-md text-sm resize-none" style={{background:T.bg,border:"1px solid "+T.line,color:T.text,lineHeight:1.5}}/></label>
-          </div>
+    {open&&snaps.length>0&&<div className="px-4 pb-4">
+      <div className="rounded-lg overflow-hidden" style={{border:"1px solid "+T.lineSoft}}>
+        <div className="grid px-3 py-2 text-xs" style={{gridTemplateColumns:".7fr 1.2fr .8fr .8fr .8fr .8fr 36px",background:T.surface2,color:T.faint,fontFamily:T.mono}}>
+          <span>CP</span><span>MEASURED</span><span className="text-right">REACH</span><span className="text-right">ENG%</span><span className="text-right">SAVES</span><span className="text-right">FOLLOWS</span><span></span>
         </div>
-        <div className="flex gap-2 px-5 py-4" style={{borderTop:"1px solid "+T.line}}><button onClick={onClose} className="sm-btn flex-1 py-2.5 rounded-md text-sm" style={{background:T.panel2,border:"1px solid "+T.line,color:T.sub}}>Cancel</button><button onClick={()=>onSave(f)} className="sm-btn flex-1 py-2.5 rounded-md text-sm font-medium" style={{background:T.brass,color:"#1a1407"}}>{isNew?"Add post":"Save changes"}</button></div>
+        {snaps.map(s=><div key={s.id} className="grid px-3 py-2 items-center text-sm" style={{gridTemplateColumns:".7fr 1.2fr .8fr .8fr .8fr .8fr 36px",borderTop:"1px solid "+T.lineSoft}}>
+          <span style={{fontFamily:T.mono,fontSize:12,color:T.brass}}>{s.checkpoint||"—"}</span>
+          <span style={{fontSize:12,color:T.sub}}>{fmtDT(s.measured_at)}</span>
+          <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5}}>{fmt(s.reach)}</span>
+          <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5}}>{er(s).toFixed(1)}</span>
+          <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5}}>{fmt(s.saves)}</span>
+          <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5}}>{fmt(s.follows)}</span>
+          <button onClick={()=>onDelSnap(s.id)} className="sm-btn flex justify-end"><Icon name="trash" size={13} color={T.faint}/></button>
+        </div>)}
       </div>
+    </div>}
+  </div>;
+}
+function Stat({label,v}){return <div><div style={{fontFamily:T.mono,fontSize:15,fontWeight:600}}>{v}</div><div style={{fontSize:10.5,color:T.faint,textTransform:"uppercase",letterSpacing:".05em"}}>{label}</div></div>;}
+
+/* ---- account & outcomes (admin) ---- */
+function AccountAdmin({client,flash}){
+  const [rows,setRows]=useState(null);
+  const [add,setAdd]=useState(false);
+  const load=async()=>{const {data,error}=await sb.from("account_metrics").select("*").eq("client_id",client.id).order("measured_at",{ascending:false});if(error)flash(error.message,true);setRows(data||[]);};
+  useEffect(()=>{setRows(null);load();},[client.id]);
+  const del=async id=>{const {error}=await sb.from("account_metrics").delete().eq("id",id);if(error)flash(error.message,true);else load();};
+  if(rows===null)return <Splash/>;
+  return <div>
+    <div className="flex justify-between items-center mb-4">
+      <p style={{color:T.sub,fontSize:13}}>Account growth &amp; business outcomes — the ROI story for the report.</p>
+      <button onClick={()=>setAdd(true)} className="sm-btn flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold" style={{background:T.brass,color:"#fff"}}><Icon name="plus" size={16} color="#fff"/> Add reading</button>
     </div>
-  );
+    {rows.length===0? <Empty title="No account readings yet" body="Add followers, profile visits, website taps, enquiries and bookings for a date."/> :
+     <div className="rounded-xl overflow-hidden" style={{border:"1px solid "+T.line}}>
+       <div className="grid px-4 py-2.5 text-xs" style={{gridTemplateColumns:"1.3fr .9fr .9fr .9fr .9fr .9fr 36px",background:T.surface2,color:T.faint,fontFamily:T.mono}}>
+         <span>DATE</span><span className="text-right">FOLLOWERS</span><span className="text-right">VISITS</span><span className="text-right">WEB TAPS</span><span className="text-right">ENQUIRIES</span><span className="text-right">BOOKINGS</span><span></span>
+       </div>
+       {rows.map(r=><div key={r.id} className="grid px-4 py-2.5 items-center text-sm" style={{gridTemplateColumns:"1.3fr .9fr .9fr .9fr .9fr .9fr 36px",borderTop:"1px solid "+T.lineSoft,background:T.surface}}>
+         <span style={{fontSize:12.5,color:T.sub}}>{fmtDT(r.measured_at)}</span>
+         <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5}}>{fmt(r.followers)}</span>
+         <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5}}>{fmt(r.profile_visits)}</span>
+         <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5}}>{fmt(r.website_taps)}</span>
+         <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5,color:T.brass}}>{fmt(r.enquiries)}</span>
+         <span className="text-right" style={{fontFamily:T.mono,fontSize:12.5,color:T.good}}>{fmt(r.bookings)}</span>
+         <button onClick={()=>del(r.id)} className="sm-btn flex justify-end"><Icon name="trash" size={13} color={T.faint}/></button>
+       </div>)}
+     </div>}
+    {add && <MetricModal client={client} onClose={()=>setAdd(false)} onSaved={()=>{setAdd(false);load();flash("Reading saved.");}} flash={flash}/>}
+  </div>;
 }
 
-function Footer({count,project,onClear}){
-  return <div className="flex items-center justify-between mt-6 pt-4 text-xs" style={{borderTop:"1px solid "+T.lineSoft,color:T.faint}}><span style={{fontFamily:T.mono}}>{project.name} · {count} post{count!==1?"s":""} · saved in this browser</span>{count>0&&<button onClick={onClear} className="sm-btn" style={{color:T.faint}}>Clear project</button>}</div>;
+/* ---- overview (shared) ---- */
+function OverviewView({client}){
+  const [data,setData]=useState(null);
+  useEffect(()=>{(async()=>{
+    const {data:posts}=await sb.from("posts").select("*").eq("client_id",client.id);
+    const {data:snaps}=await sb.from("snapshots").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
+    const {data:metrics}=await sb.from("account_metrics").select("*").eq("client_id",client.id).order("measured_at",{ascending:false});
+    const latestByPost={};(snaps||[]).forEach(s=>{latestByPost[s.post_id]=s;});
+    const latestSnaps=Object.values(latestByPost);
+    const reach=latestSnaps.reduce((a,s)=>a+num(s.reach),0);
+    const avgEr=latestSnaps.length?latestSnaps.reduce((a,s)=>a+er(s),0)/latestSnaps.length:0;
+    const m=(metrics||[])[0];
+    setData({posts:posts||[],reach,avgEr,followers:m?num(m.followers):0,enquiries:m?num(m.enquiries):0,bookings:m?num(m.bookings):0});
+  })();},[client.id]);
+  if(!data)return <Splash/>;
+  return <div>
+    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+      <KPI icon="eye" label="Reach (latest readings)" v={fmt(data.reach)}/>
+      <KPI icon="bookmark" label="Avg engagement" v={data.avgEr.toFixed(1)+"%"}/>
+      <KPI icon="users" label="Followers (latest)" v={fmt(data.followers)}/>
+      <KPI icon="target" label="Enquiries (latest)" v={fmt(data.enquiries)} tone={T.brass}/>
+      <KPI icon="check" label="Bookings (latest)" v={fmt(data.bookings)} tone={T.good}/>
+      <KPI icon="folder" label="Posts tracked" v={data.posts.length}/>
+    </div>
+    <div className="rounded-xl p-4 text-sm" style={{background:T.surface,border:"1px solid "+T.line,color:T.sub}}>
+      Period-over-period comparison, charts, the branded PDF report and AI strategy arrive in the next phases — built on exactly this data.
+    </div>
+  </div>;
+}
+function KPI({icon,label,v,tone}){
+  return <div className="rounded-xl p-3.5" style={{background:T.surface,border:"1px solid "+T.line}}>
+    <div className="flex items-center justify-between"><span style={{color:T.faint,fontSize:11.5}}>{label}</span><Icon name={icon} size={15} color={tone||T.sub}/></div>
+    <div style={{fontSize:23,fontWeight:600,fontFamily:T.mono,marginTop:8,color:tone||T.ink}}>{v}</div>
+  </div>;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+/* ========================= CLIENT APP ======================== */
+function ClientApp({session,profile}){
+  const [client,setClient]=useState(null);
+  const [missing,setMissing]=useState(false);
+  useEffect(()=>{(async()=>{
+    if(!profile.client_id){setMissing(true);return;}
+    const {data}=await sb.from("clients").select("*").eq("id",profile.client_id).single();
+    if(data)setClient(data);else setMissing(true);
+  })();},[]);
+  if(missing)return <Shell><Header title="Welcome" email={session.user.email}/><Empty title="Your account isn't linked to a brand yet" body="Story & Motion will connect your dashboard shortly. Please check back soon."/></Shell>;
+  if(!client)return <Splash/>;
+  return <Shell>
+    <Header title={client.name} sub="Your performance dashboard" email={session.user.email}/>
+    <OverviewView client={client}/>
+    <div className="mt-6"><ClientPosts client={client}/></div>
+  </Shell>;
+}
+function ClientPosts({client}){
+  const [posts,setPosts]=useState(null);const [latest,setLatest]=useState({});
+  useEffect(()=>{(async()=>{
+    const {data:p}=await sb.from("posts").select("*").eq("client_id",client.id).order("published_at",{ascending:false});
+    const {data:s}=await sb.from("snapshots").select("*").eq("client_id",client.id).order("measured_at",{ascending:true});
+    const by={};(s||[]).forEach(x=>{by[x.post_id]=x;});setLatest(by);setPosts(p||[]);
+  })();},[client.id]);
+  if(posts===null)return null;
+  if(!posts.length)return <Empty title="No posts yet" body="Your content reports will appear here."/>;
+  return <div>
+    <h3 style={{fontSize:15,fontWeight:600,marginBottom:10}}>Posts</h3>
+    <div className="flex flex-col gap-2">{posts.map(p=>{const s=latest[p.id];return <div key={p.id} className="rounded-xl p-4 flex items-center justify-between gap-3" style={{background:T.surface,border:"1px solid "+T.line}}>
+      <div className="min-w-0"><div className="truncate" style={{fontWeight:600,fontSize:14}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:T.faint}}>{p.format} · {fmtDT(p.published_at)}</div></div>
+      {s?<div className="flex gap-4 shrink-0"><Stat label="reach" v={fmt(s.reach)}/><Stat label="eng%" v={er(s).toFixed(1)}/><Stat label="saves" v={fmt(s.saves)}/></div>:<span style={{fontSize:12,color:T.faint}}>Pending</span>}
+    </div>;})}</div>
+  </div>;
+}
+
+/* ========================== MODALS =========================== */
+function Modal({title,onClose,children,footer}){
+  return <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{background:"rgba(20,18,14,0.4)"}} onClick={onClose}>
+    <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl overflow-hidden max-h-[92vh] flex flex-col" style={{background:T.surface,border:"1px solid "+T.line}} onClick={e=>e.stopPropagation()}>
+      <div className="flex items-center justify-between px-5 py-4" style={{borderBottom:"1px solid "+T.line}}><h3 style={{fontWeight:700,fontSize:16}}>{title}</h3><button onClick={onClose} className="sm-btn p-1.5 rounded"><Icon name="x" size={18} color={T.sub}/></button></div>
+      <div className="px-5 py-4 overflow-y-auto">{children}</div>
+      <div className="flex gap-2 px-5 py-4" style={{borderTop:"1px solid "+T.line}}>{footer}</div>
+    </div>
+  </div>;
+}
+function Field({label,value,onChange,type="text",ph}){
+  return <label className="block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono,letterSpacing:".04em"}}>{label.toUpperCase()}</span>
+    <input type={type} value={value} placeholder={ph} onChange={e=>onChange(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.ink,fontFamily:type==="number"?T.mono:T.sans}}/></label>;
+}
+const SaveBtn=({onClick,busy,label})=><button onClick={onClick} disabled={busy} className="sm-btn flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2" style={{background:T.brass,color:"#fff",opacity:busy?.7:1}}>{busy&&<Icon name="loader" size={15} color="#fff" cls="spin"/>}{label}</button>;
+const CancelBtn=({onClick})=><button onClick={onClick} className="sm-btn flex-1 py-2.5 rounded-lg text-sm" style={{background:T.surface2,border:"1px solid "+T.line,color:T.sub}}>Cancel</button>;
+
+function ClientModal({onClose,onSaved,flash}){
+  const [name,setName]=useState("");const [industry,setIndustry]=useState("Hotel");const [busy,setBusy]=useState(false);
+  const save=async()=>{if(!name.trim())return;setBusy(true);const {data,error}=await sb.from("clients").insert([{name:name.trim(),industry}]).select().single();setBusy(false);if(error)flash(error.message,true);else onSaved(data);};
+  return <Modal title="New client" onClose={onClose} footer={<><CancelBtn onClick={onClose}/><SaveBtn onClick={save} busy={busy} label="Create"/></>}>
+    <div className="flex flex-col gap-3">
+      <Field label="Client / brand name" value={name} onChange={setName} ph="The Cedar House Hotel"/>
+      <label className="block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono}}>INDUSTRY</span>
+        <select value={industry} onChange={e=>setIndustry(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.ink}}>{["Hotel","Dental","Aesthetics","Restaurant","Other"].map(x=><option key={x}>{x}</option>)}</select></label>
+    </div>
+  </Modal>;
+}
+
+function PostModal({client,onClose,onSaved,flash}){
+  const [f,setF]=useState({title:"",format:"Reel",published_at:nowLocal(),caption:"",hashtags:"",music:""});
+  const [busy,setBusy]=useState(false);const set=(k,v)=>setF(s=>({...s,[k]:v}));
+  const save=async()=>{setBusy(true);const {error}=await sb.from("posts").insert([{client_id:client.id,title:f.title,format:f.format,published_at:toISO(f.published_at),caption:f.caption,hashtags:f.hashtags,music:f.music}]);setBusy(false);if(error)flash(error.message,true);else onSaved();};
+  return <Modal title="New post" onClose={onClose} footer={<><CancelBtn onClick={onClose}/><SaveBtn onClick={save} busy={busy} label="Add post"/></>}>
+    <div className="grid sm:grid-cols-2 gap-3">
+      <div className="sm:col-span-2"><Field label="Title / label" value={f.title} onChange={v=>set("title",v)} ph="Suite reveal reel"/></div>
+      <label className="block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono}}>FORMAT</span><select value={f.format} onChange={e=>set("format",e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.ink}}>{FORMATS.map(x=><option key={x}>{x}</option>)}</select></label>
+      <Field label="Posted (day/date/time)" type="datetime-local" value={f.published_at} onChange={v=>set("published_at",v)}/>
+      <div className="sm:col-span-2"><Field label="Audio / music" value={f.music} onChange={v=>set("music",v)} ph="Track or sound name"/></div>
+      <div className="sm:col-span-2"><Field label="Hashtags" value={f.hashtags} onChange={v=>set("hashtags",v)} ph="#hotelreels #luxurytravel"/></div>
+      <label className="sm:col-span-2 block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono}}>CAPTION</span><textarea value={f.caption} onChange={e=>set("caption",e.target.value)} rows={2} className="w-full mt-1 px-3 py-2 rounded-lg text-sm resize-none" style={{background:T.bg,border:"1px solid "+T.line,color:T.ink}}/></label>
+    </div>
+  </Modal>;
+}
+
+function SnapshotModal({post,client,onClose,onSaved,flash}){
+  const [measured,setMeasured]=useState(nowLocal());
+  const [cp,setCp]=useState(suggestCheckpoint(post.published_at,new Date().toISOString()));
+  const [m,setM]=useState({reach:"",likes:"",comments:"",shares:"",saves:"",follows:""});
+  const [busy,setBusy]=useState(false);const set=(k,v)=>setM(s=>({...s,[k]:v}));
+  useEffect(()=>{setCp(suggestCheckpoint(post.published_at,toISO(measured)));},[measured]);
+  const save=async()=>{setBusy(true);const {error}=await sb.from("snapshots").insert([{post_id:post.id,client_id:client.id,measured_at:toISO(measured),checkpoint:cp,reach:num(m.reach),likes:num(m.likes),comments:num(m.comments),shares:num(m.shares),saves:num(m.saves),follows:num(m.follows)}]);setBusy(false);if(error)flash(error.message,true);else onSaved();};
+  return <Modal title={"Add reading — "+(post.title||"post")} onClose={onClose} footer={<><CancelBtn onClick={onClose}/><SaveBtn onClick={save} busy={busy} label="Save reading"/></>}>
+    <div className="grid sm:grid-cols-2 gap-3">
+      <Field label="Measured (entry day/date/time)" type="datetime-local" value={measured} onChange={setMeasured}/>
+      <label className="block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono}}>CHECKPOINT</span><select value={cp} onChange={e=>setCp(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.ink}}>{CHECKPOINTS.map(x=><option key={x}>{x}</option>)}</select>
+        <span style={{fontSize:10.5,color:T.faint}}>Auto-set from days since posting — change if needed.</span></label>
+      <Field label="Reach / views" type="number" value={m.reach} onChange={v=>set("reach",v)}/>
+      <Field label="Followers gained" type="number" value={m.follows} onChange={v=>set("follows",v)}/>
+      <Field label="Likes" type="number" value={m.likes} onChange={v=>set("likes",v)}/>
+      <Field label="Comments" type="number" value={m.comments} onChange={v=>set("comments",v)}/>
+      <Field label="Shares" type="number" value={m.shares} onChange={v=>set("shares",v)}/>
+      <Field label="Saves" type="number" value={m.saves} onChange={v=>set("saves",v)}/>
+    </div>
+  </Modal>;
+}
+
+function MetricModal({client,onClose,onSaved,flash}){
+  const [measured,setMeasured]=useState(nowLocal());
+  const [m,setM]=useState({followers:"",profile_visits:"",website_taps:"",enquiries:"",bookings:"",notes:""});
+  const [busy,setBusy]=useState(false);const set=(k,v)=>setM(s=>({...s,[k]:v}));
+  const save=async()=>{setBusy(true);const {error}=await sb.from("account_metrics").insert([{client_id:client.id,measured_at:toISO(measured),followers:num(m.followers),profile_visits:num(m.profile_visits),website_taps:num(m.website_taps),enquiries:num(m.enquiries),bookings:num(m.bookings),notes:m.notes}]);setBusy(false);if(error)flash(error.message,true);else onSaved();};
+  return <Modal title="Add account reading" onClose={onClose} footer={<><CancelBtn onClick={onClose}/><SaveBtn onClick={save} busy={busy} label="Save reading"/></>}>
+    <div className="grid sm:grid-cols-2 gap-3">
+      <Field label="Date" type="datetime-local" value={measured} onChange={setMeasured}/>
+      <Field label="Followers (total)" type="number" value={m.followers} onChange={v=>set("followers",v)}/>
+      <Field label="Profile visits" type="number" value={m.profile_visits} onChange={v=>set("profile_visits",v)}/>
+      <Field label="Website taps" type="number" value={m.website_taps} onChange={v=>set("website_taps",v)}/>
+      <Field label="Enquiries" type="number" value={m.enquiries} onChange={v=>set("enquiries",v)}/>
+      <Field label="Bookings" type="number" value={m.bookings} onChange={v=>set("bookings",v)}/>
+      <label className="sm:col-span-2 block"><span style={{fontSize:11.5,color:T.faint,fontFamily:T.mono}}>NOTES</span><input value={m.notes} onChange={e=>set("notes",e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg text-sm" style={{background:T.bg,border:"1px solid "+T.line,color:T.ink}}/></label>
+    </div>
+  </Modal>;
+}
+
+/* --------------------------- bits --------------------------- */
+function Empty({title,body,action}){
+  return <div className="rounded-xl flex flex-col items-center justify-center text-center py-14 px-6" style={{background:T.surface,border:"1px dashed "+T.line}}>
+    <h3 style={{fontSize:17,fontWeight:600}}>{title}</h3><p style={{color:T.sub,fontSize:13.5,maxWidth:380,marginTop:6}}>{body}</p>{action&&<div className="mt-5">{action}</div>}
+  </div>;
+}
+function Toast({m,bad}){
+  return <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg text-sm flex items-center gap-2" style={{background:bad?"#FBEEEA":"#1C1A16",color:bad?T.bad:"#fff",border:bad?"1px solid #F0D4CC":"none",boxShadow:"0 8px 24px rgba(0,0,0,.18)"}}>
+    <Icon name={bad?"x":"check"} size={15} color={bad?T.bad:"#fff"}/>{m}
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
 </script>
 </body>
 </html>
