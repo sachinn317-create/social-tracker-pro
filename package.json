@@ -4,3 +4,7 @@
   "private": true,
   "description": "AI-powered multi-project social media tracker for Story & Motion"
 }
+{
+  "type": "module",
+  ... your existing lines ...
+}
