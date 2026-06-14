@@ -1,5 +1,3 @@
-# social-tracker-pro
-
 # Social Tracker Pro — Setup Guide
 
 An AI-powered social media tracker with **separate projects per client**, full analytics, and an **AI Strategy** tab where Claude reads each client's numbers and writes a tailored report.
